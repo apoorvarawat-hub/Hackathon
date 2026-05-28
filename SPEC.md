@@ -677,6 +677,50 @@ LIMIT 200
 - Review flow supports user correction before Salesforce create/update.
 
 ---
+# UI Changes — Account Details Panel Layout Optimization
+
+## Observation
+During UI review and usability testing, the Account Details section on the right side occupies too much horizontal space, reducing visibility of the main Salesforce Accounts table.
+
+This makes the table feel compressed and reduces readability when reviewing multiple Accounts.
+
+## Required UI Changes
+
+### Reduce Account Details Panel Width
+The Account Details section on the right side of the screen should be reduced in width so that the Salesforce Accounts table becomes more visible and easier to review.
+
+### Updated Layout Goal
+The layout should prioritize:
+- Better visibility of the Accounts table
+- Easier scanning of Account rows
+- Improved readability of Account columns
+- Reduced horizontal compression in the main table
+
+### Recommended Layout Behavior
+- Increase the width allocated to the Salesforce Accounts table
+- Reduce the default width of the Account Details panel
+- Keep the Account Details panel visible, but secondary in emphasis compared to the main table
+
+### UX Expectations
+The updated layout should:
+- Allow users to view more table data without truncation
+- Improve visibility of:
+  - Account Name
+  - Territory Region
+  - Website
+  - Last Modified Date
+- Make multi-account review easier
+- Reduce unnecessary whitespace in the Account Details section
+
+### Success Criteria
+- Main table width is visibly increased
+- Account rows are easier to scan and review
+- Fewer columns are truncated
+- Account Details panel remains functional while taking less screen space
+- Overall UI readability improves for discovery workflows
+
+
+---
 
 ## Milestone 7 — Salesforce Create/Update
 
@@ -969,3 +1013,6 @@ The solution balances:
 By introducing a human-in-the-loop review workflow, the platform avoids the risks associated with direct autonomous CRM mutation while significantly reducing manual dealership research effort.
 
 This creates a practical foundation for AI-assisted Salesforce enrichment at scale.
+
+## Implementing Auth
+I would like to add authentication using Google to my application in this text file. I would like to have a two column table stored in my codebase, the left side column being the my karma dot com Google username of the user who's trying to log in, and the right column being the Salesforce username. Every single user will be shown a login with Google button before seeing any real data. And when they come back from Google authentication, the system should check if their Google username exists on the left side column in my two bottom table. If it doesn't, they should not be allowed to log in. And if it does, they should be allowed to log in with their name showing in the UI, but also any API calls to Salesforce should use the Salesforce username I have given on the right side column.

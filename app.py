@@ -1,9 +1,86 @@
 import os
 import asyncio
 from scraper import run_scraper
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, session, redirect, url_for
+from authlib.integrations.flask_client import OAuth
+import salesforce as sf_client
+import users as users_module
 
 app = Flask(__name__, static_folder='static', static_url_path='')
+app.secret_key = os.getenv('FLASK_SECRET_KEY', os.urandom(24).hex())
+
+# ── Google OAuth ──────────────────────────────────────────────────────────────
+oauth = OAuth(app)
+google_oauth = oauth.register(
+    name='google',
+    client_id=os.getenv('GOOGLE_CLIENT_ID'),
+    client_secret=os.getenv('GOOGLE_CLIENT_SECRET'),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'},
+)
+
+# ── Auth guard ────────────────────────────────────────────────────────────────
+_OPEN_PATHS = {'/login', '/auth/google', '/auth/google/callback', '/logout'}
+_STATIC_EXTS = ('.css', '.js', '.ico', '.png', '.jpg', '.jpeg', '.woff', '.woff2', '.svg', '.map')
+
+@app.before_request
+def require_login():
+    if request.path in _OPEN_PATHS:
+        return None
+    if any(request.path.endswith(ext) for ext in _STATIC_EXTS):
+        return None
+    if 'user' not in session:
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Not authenticated'}), 401
+        return redirect('/login')
+
+# ── Auth routes ───────────────────────────────────────────────────────────────
+@app.route('/login')
+def login_page():
+    if 'user' in session:
+        return redirect('/')
+    return app.send_static_file('login.html')
+
+@app.route('/auth/google')
+def google_login():
+    redirect_uri = url_for('google_callback', _external=True)
+    return google_oauth.authorize_redirect(redirect_uri)
+
+@app.route('/auth/google/callback')
+def google_callback():
+    try:
+        token = google_oauth.authorize_access_token()
+    except Exception:
+        return redirect('/login?error=Authentication+failed.+Please+try+again.')
+
+    user_info = token.get('userinfo', {})
+    email = user_info.get('email', '').strip().lower()
+
+    if not users_module.is_authorized(email):
+        return redirect(f'/login?error=Access+denied.+{email}+is+not+authorized+to+use+this+application.')
+
+    name = user_info.get('name', email)
+    parts = name.split()
+    initials = (parts[0][0] + parts[-1][0]).upper() if len(parts) >= 2 else name[:2].upper()
+
+    session['user'] = {
+        'email': email,
+        'name': name,
+        'picture': user_info.get('picture', ''),
+        'initials': initials,
+        'sf_username': users_module.get_sf_username(email),
+    }
+    return redirect('/')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/login')
+
+@app.route('/api/me')
+def get_me():
+    return jsonify(session.get('user', {}))
+
 
 # Salesforce-compliant Mock Account Database
 SALESFORCE_ACCOUNTS = [
@@ -111,36 +188,55 @@ SALESFORCE_ACCOUNTS = [
 def index():
     return app.send_static_file('index.html')
 
+# In-memory cache: populated on /api/accounts and augmented during discovery/extraction.
+# Keyed by account Id so discovery and extraction can look up by Id.
+_account_cache: dict[str, dict] = {}
+
+
 @app.route('/api/accounts', methods=['GET'])
 def get_accounts():
     name_filter = request.args.get('name', '').strip().lower()
     region_filter = request.args.get('region', '').strip()
     payments_stage_filter = request.args.get('payments_stage', '').strip()
 
-    filtered = []
+    if sf_client.USE_SALESFORCE:
+        try:
+            accounts = sf_client.fetch_prospect_accounts(
+                name=name_filter,
+                region=region_filter,
+                payments_stage=payments_stage_filter,
+            )
+            # Rebuild cache from latest SF data (preserves any _scraperResult already set)
+            for acc in accounts:
+                existing = _account_cache.get(acc['Id'], {})
+                acc['_scraperResult'] = existing.get('_scraperResult')
+                acc['CrawledPages'] = existing.get('CrawledPages', [])
+                _account_cache[acc['Id']] = acc
+            # Strip internal fields before returning to frontend
+            return jsonify([{k: v for k, v in a.items() if not k.startswith('_')} for a in accounts])
+        except Exception as e:
+            print(f"Salesforce fetch failed, falling back to mock data: {e}")
 
+    # ── Mock fallback ──────────────────────────────────────────────────────────
+    filtered = []
     for acc in SALESFORCE_ACCOUNTS:
-        # Default filters: website required, only Prospect accounts
         if not acc.get('Website'):
             continue
         if acc.get('Account_Status__c') != 'Prospect':
             continue
-
-        # Apply user-controlled filters
         if name_filter and name_filter not in acc['Name'].lower():
             continue
-
         if region_filter and acc['Territory_Region__c'] != region_filter:
             continue
-
         if payments_stage_filter and acc['Payments_Stage__c'] != payments_stage_filter:
             continue
-            
         filtered.append(acc)
-        
-    # Sort by LastModifiedDate DESC (matching example SOQL shape)
+
     filtered.sort(key=lambda x: x['LastModifiedDate'], reverse=True)
-    
+
+    for acc in filtered:
+        _account_cache[acc['Id']] = acc
+
     return jsonify(filtered)
 
 import urllib.parse
@@ -300,9 +396,12 @@ def start_discovery():
     urls_to_scrape = []
     url_to_acc = {}
 
-    for acc in SALESFORCE_ACCOUNTS:
-        if acc['Id'] not in account_ids:
-            continue
+    # Resolve accounts from cache (populated by /api/accounts); fall back to mock list
+    source_accounts = [_account_cache[aid] for aid in account_ids if aid in _account_cache]
+    if not source_accounts:
+        source_accounts = [a for a in SALESFORCE_ACCOUNTS if a['Id'] in account_ids]
+
+    for acc in source_accounts:
         website = acc.get('Website', '')
         is_valid = False
         if website:
@@ -320,6 +419,11 @@ def start_discovery():
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             reason = f"No website available - {timestamp}"
             acc['Dawn_Status__c'] = reason
+            if sf_client.USE_SALESFORCE:
+                try:
+                    sf_client.update_account_dawn_status(acc['Id'], reason)
+                except Exception as e:
+                    print(f"SF update failed for {acc['Id']}: {e}")
             invalid_accounts.append({
                 "Id": acc['Id'],
                 "Name": acc['Name'],
@@ -346,6 +450,11 @@ def start_discovery():
             if result.get('blocked'):
                 reason = f"Blocked - {timestamp}"
                 acc['Dawn_Status__c'] = reason
+                if sf_client.USE_SALESFORCE:
+                    try:
+                        sf_client.update_account_dawn_status(acc['Id'], reason)
+                    except Exception as e:
+                        print(f"SF update failed for {acc['Id']}: {e}")
                 invalid_accounts.append({
                     "Id": acc['Id'],
                     "Name": acc['Name'],
@@ -356,6 +465,11 @@ def start_discovery():
             elif result.get('error') and not result.get('team_page_found'):
                 reason = f"Error - {timestamp}"
                 acc['Dawn_Status__c'] = reason
+                if sf_client.USE_SALESFORCE:
+                    try:
+                        sf_client.update_account_dawn_status(acc['Id'], reason)
+                    except Exception as e:
+                        print(f"SF update failed for {acc['Id']}: {e}")
                 invalid_accounts.append({
                     "Id": acc['Id'],
                     "Name": acc['Name'],
@@ -390,9 +504,11 @@ def start_extraction():
 
     all_results = []
 
-    # Build a lookup from team-page URL → cached scraper result stored during discovery
+    # Build a lookup from team-page URL → cached scraper result stored during discovery.
+    # Check _account_cache first (real SF flow), fall back to mock list.
     team_page_cache: dict = {}
-    for acc in SALESFORCE_ACCOUNTS:
+    cache_sources = list(_account_cache.values()) or SALESFORCE_ACCOUNTS
+    for acc in cache_sources:
         scraper_result = acc.get('_scraperResult')
         if scraper_result and scraper_result.get('team_page_found'):
             team_page_cache[scraper_result['team_page_found']] = scraper_result
@@ -479,7 +595,9 @@ def submit_review():
     account_id = data['accountId']
     contacts = data['contacts']
     
-    account = next((a for a in SALESFORCE_ACCOUNTS if a['Id'] == account_id), None)
+    account = _account_cache.get(account_id) or next(
+        (a for a in SALESFORCE_ACCOUNTS if a['Id'] == account_id), None
+    )
     if not account:
         return jsonify({"error": f"Account with ID {account_id} not found"}), 404
         
@@ -498,7 +616,17 @@ def submit_review():
     
     def clean_phone(p):
         return "".join(c for c in p if c.isdigit()) if p else ""
-        
+
+    # Load existing contacts for this account (SF or mock)
+    if sf_client.USE_SALESFORCE:
+        try:
+            existing_contacts = sf_client.fetch_contacts_for_account(account_id)
+        except Exception as e:
+            print(f"SF contact fetch failed: {e}")
+            existing_contacts = [c for c in SALESFORCE_CONTACTS if c.get('AccountId') == account_id]
+    else:
+        existing_contacts = [c for c in SALESFORCE_CONTACTS if c.get('AccountId') == account_id]
+
     for c in contacts:
         action = c.get('action', 'pending')
         if action == 'rejected':
@@ -517,15 +645,15 @@ def submit_review():
         title = c.get('normalized_role', c.get('title', '')).strip()
         
         # 1. Match by Email
-        email_match = next((x for x in SALESFORCE_CONTACTS if x.get('Email', '').strip().lower() == email), None)
-        
+        email_match = next((x for x in existing_contacts if x.get('Email', '').strip().lower() == email), None) if email else None
+
         # 2. Match by Name + Account
-        name_acc_match = next((x for x in SALESFORCE_CONTACTS if x.get('Name', '').strip().lower() == full_name and x.get('AccountId') == account_id), None)
-        
+        name_acc_match = next((x for x in existing_contacts if x.get('Name', '').strip().lower() == full_name), None)
+
         # 3. Match by Phone + Account
         phone_acc_match = None
         if phone:
-            phone_acc_match = next((x for x in SALESFORCE_CONTACTS if clean_phone(x.get('Phone', '')) == phone and x.get('AccountId') == account_id), None)
+            phone_acc_match = next((x for x in existing_contacts if clean_phone(x.get('Phone', '')) == phone), None)
             
         operation = ""
         status_str = ""
@@ -546,8 +674,14 @@ def submit_review():
                 else:
                     operation = "Update Existing Contact"
                     status_str = "Updated"
-                    email_match['Phone'] = c.get('phone_number', '')
-                    email_match['Title'] = title
+                    if sf_client.USE_SALESFORCE:
+                        try:
+                            sf_client.update_contact(matched_id, phone=c.get('phone_number', ''), title=title)
+                        except Exception as e:
+                            print(f"SF update failed for {matched_id}: {e}")
+                    else:
+                        email_match['Phone'] = c.get('phone_number', '')
+                        email_match['Title'] = title
                     updated_count += 1
                     audit_trail.append(f"[{timestamp}] UPDATE: Updated contact {matched_id} ({c.get('full_name')}) with title='{title}' and phone='{c.get('phone_number')}'")
             else:
@@ -556,17 +690,23 @@ def submit_review():
                 error_msg = f"Email matches existing CRM contact '{email_match.get('Name')}' ({matched_id}), but Name differs."
                 flagged_count += 1
                 audit_trail.append(f"[{timestamp}] WARNING: Flagged duplicate email '{email}' for '{c.get('full_name')}'. Matches '{email_match.get('Name')}' in CRM.")
-                
+
         elif name_acc_match:
             matched_id = name_acc_match.get('Id')
             operation = "Update Existing Contact"
             status_str = "Updated"
-            name_acc_match['Email'] = c.get('email', '')
-            name_acc_match['Phone'] = c.get('phone_number', '')
-            name_acc_match['Title'] = title
+            if sf_client.USE_SALESFORCE:
+                try:
+                    sf_client.update_contact(matched_id, email=c.get('email', ''), phone=c.get('phone_number', ''), title=title)
+                except Exception as e:
+                    print(f"SF update failed for {matched_id}: {e}")
+            else:
+                name_acc_match['Email'] = c.get('email', '')
+                name_acc_match['Phone'] = c.get('phone_number', '')
+                name_acc_match['Title'] = title
             updated_count += 1
             audit_trail.append(f"[{timestamp}] UPDATE: Updated contact {matched_id} ({c.get('full_name')}) with email='{c.get('email')}' and phone='{c.get('phone_number')}'")
-            
+
         elif phone_acc_match:
             matched_id = phone_acc_match.get('Id')
             operation = "Flag Ambiguous Match"
@@ -574,18 +714,30 @@ def submit_review():
             error_msg = f"Phone matches existing CRM contact '{phone_acc_match.get('Name')}' ({matched_id}), but Name/Email differ."
             flagged_count += 1
             audit_trail.append(f"[{timestamp}] WARNING: Flagged duplicate phone '{c.get('phone_number')}' for '{c.get('full_name')}'. Matches '{phone_acc_match.get('Name')}' in CRM.")
-            
+
         else:
-            new_id = f"CON-{account_id}-{len(SALESFORCE_CONTACTS) + 1}"
-            new_contact = {
-                "Id": new_id,
-                "AccountId": account_id,
-                "Name": c.get('full_name', ''),
-                "Email": c.get('email', ''),
-                "Phone": c.get('phone_number', ''),
-                "Title": title
-            }
-            SALESFORCE_CONTACTS.append(new_contact)
+            if sf_client.USE_SALESFORCE:
+                try:
+                    new_id = sf_client.create_contact(
+                        account_id,
+                        c.get('full_name', ''),
+                        c.get('email', ''),
+                        c.get('phone_number', ''),
+                        title,
+                    )
+                except Exception as e:
+                    print(f"SF create failed: {e}")
+                    new_id = f"CON-{account_id}-ERR"
+            else:
+                new_id = f"CON-{account_id}-{len(SALESFORCE_CONTACTS) + 1}"
+                SALESFORCE_CONTACTS.append({
+                    "Id": new_id,
+                    "AccountId": account_id,
+                    "Name": c.get('full_name', ''),
+                    "Email": c.get('email', ''),
+                    "Phone": c.get('phone_number', ''),
+                    "Title": title,
+                })
             matched_id = new_id
             operation = "Create Contact"
             status_str = "Created"

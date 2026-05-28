@@ -10,3 +10,11 @@ lxml
 # Validation
 email-validator
 phonenumbers
+
+# Salesforce
+simple-salesforce
+python-dotenv
+
+# Authentication
+authlib
+requests

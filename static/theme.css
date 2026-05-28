@@ -304,7 +304,7 @@ body, html {
   padding: 24px;
   overflow-y: auto;
   display: grid;
-  grid-template-columns: 1.5fr 1fr;
+  grid-template-columns: 4fr 1fr;
   gap: 24px;
 }
 
@@ -455,6 +455,7 @@ body, html {
    ------------------------------------------ */
 .table-container {
   flex-grow: 1;
+  overflow-x: auto;
   overflow-y: auto;
   border: 1px solid var(--border, #E9EAEB);
   border-radius: 6px;
@@ -481,6 +482,47 @@ body, html {
   position: sticky;
   top: 0;
   z-index: 10;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Sortable header */
+.myk-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.myk-table th.sortable:hover {
+  background: var(--nav-hover-bg, rgba(3,119,179,0.06));
+  color: var(--brand, #0377B3);
+}
+.myk-table th.sort-active {
+  color: var(--brand, #0377B3);
+}
+.sort-icon {
+  font-size: 13px !important;
+  vertical-align: middle;
+  margin-left: 2px;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.myk-table th.sort-active .sort-icon {
+  opacity: 1;
+}
+
+/* Column resize handle */
+.col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 20;
+}
+.col-resize-handle:hover {
+  background: var(--brand, #0377B3);
+  opacity: 0.35;
 }
 
 .myk-table td {
@@ -547,14 +589,14 @@ body, html {
 .details-panel {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 .detail-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 12px;
+  flex-direction: column;
+  gap: 3px;
+  padding-bottom: 10px;
   border-bottom: 1px dashed var(--border, #E9EAEB);
 }
 
@@ -584,11 +626,11 @@ body, html {
   background: var(--success-bg, #ECFDF3);
   border: 1px solid var(--success-green, #027A48);
   border-radius: 6px;
-  padding: 12px 16px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 #shell.dark .website-container {

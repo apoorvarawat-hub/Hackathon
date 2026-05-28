@@ -13,6 +13,7 @@ const state = {
     region: '',
     paymentsStage: ''
   },
+  sort: { column: 'LastModifiedDate', direction: 'desc' },
   activeView: 'viewAccountSelect',
   extractedContacts: [],
   editingContactId: null,
@@ -24,10 +25,25 @@ const state = {
 // ------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
   initThemeState();
+  loadCurrentUser();
   fetchAccounts();
   setupEventListeners();
   setupModalListeners();
+  initTableInteractivity();
 });
+
+async function loadCurrentUser() {
+  try {
+    const res = await fetch('/api/me');
+    if (res.status === 401) { window.location.href = '/login'; return; }
+    const user = await res.json();
+    if (!user.email) return;
+    const avatar = document.getElementById('userAvatar');
+    const nameEl = document.getElementById('userDisplayName');
+    if (avatar) avatar.textContent = user.initials || user.name?.slice(0, 2).toUpperCase() || '--';
+    if (nameEl) nameEl.textContent = user.name || user.email;
+  } catch (_) {}
+}
 
 // ------------------------------------------
 // Theme State Management (Light / Dark)
@@ -125,6 +141,61 @@ function populateFilterOptions(data) {
 }
 
 // ------------------------------------------
+// Table Sort + Resize Interactivity (init once)
+// ------------------------------------------
+function initTableInteractivity() {
+  const table = document.getElementById('accountsTable');
+
+  // ── Sort: click on sortable headers ──────────────────────────────────────
+  table.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', e => {
+      if (e.target.classList.contains('col-resize-handle')) return;
+      const key = th.getAttribute('data-sort-key');
+      if (!key) return;
+      if (state.sort.column === key) {
+        state.sort.direction = state.sort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.sort.column = key;
+        state.sort.direction = 'asc';
+      }
+      renderAccountsTable();
+    });
+  });
+
+  // ── Column resize ─────────────────────────────────────────────────────────
+  let _resizing = null;
+
+  table.querySelectorAll('th:not(:first-child)').forEach(th => {
+    const handle = document.createElement('div');
+    handle.className = 'col-resize-handle';
+    th.appendChild(handle);
+
+    handle.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      _resizing = { th, startX: e.pageX, startWidth: th.offsetWidth };
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!_resizing) return;
+    const newWidth = Math.max(60, _resizing.startWidth + (e.pageX - _resizing.startX));
+    _resizing.th.style.width = newWidth + 'px';
+    _resizing.th.style.minWidth = newWidth + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (_resizing) {
+      _resizing = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  });
+}
+
+// ------------------------------------------
 // DOM Rendering (Accounts Table & Grid)
 // ------------------------------------------
 function renderAccountsTable() {
@@ -134,27 +205,50 @@ function renderAccountsTable() {
   const table = document.getElementById('accountsTable');
   
   tableBody.innerHTML = '';
-  
+
   // Update count label
   const total = state.accounts.length;
   countLabel.textContent = `${total} Account${total !== 1 ? 's' : ''}`;
-  
+
   if (total === 0) {
     emptyState.style.display = 'flex';
     table.style.display = 'none';
     return;
   }
-  
+
   emptyState.style.display = 'none';
   table.style.display = 'table';
-  
+
+  // Update sort icons
+  document.querySelectorAll('#accountsTable th[data-sort-key]').forEach(th => {
+    const icon = th.querySelector('.sort-icon');
+    if (!icon) return;
+    const key = th.getAttribute('data-sort-key');
+    if (key === state.sort.column) {
+      icon.textContent = state.sort.direction === 'asc' ? 'arrow_upward' : 'arrow_downward';
+      th.classList.add('sort-active');
+    } else {
+      icon.textContent = 'unfold_more';
+      th.classList.remove('sort-active');
+    }
+  });
+
+  // Sort a copy — never mutate state.accounts order
+  const sorted = [...state.accounts].sort((a, b) => {
+    const key = state.sort.column;
+    const av = (a[key] || '').toString().toLowerCase();
+    const bv = (b[key] || '').toString().toLowerCase();
+    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    return state.sort.direction === 'asc' ? cmp : -cmp;
+  });
+
   const formatDate = (isoString) => {
     if (!isoString) return '';
     const date = new Date(isoString);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
-  
-  state.accounts.forEach(acc => {
+
+  sorted.forEach(acc => {
     const tr = document.createElement('tr');
     tr.setAttribute('data-id', acc.Id);
     
@@ -452,6 +546,12 @@ function setupEventListeners() {
   // Theme Toggle Button
   const themeBtn = document.getElementById('themeToggleBtn');
   themeBtn.addEventListener('click', toggleTheme);
+
+  // Refresh Grid Button
+  document.getElementById('btnRefreshGrid').addEventListener('click', () => {
+    state.accounts = [];
+    fetchAccounts();
+  });
   
   // SPA Sidebar Navigation Click Handlers
   const navItems = {
@@ -818,6 +918,37 @@ function showValidationModal(result) {
   modal.style.display = 'flex';
 }
 
+// ------------------------------------------
+// Toast Notification
+// ------------------------------------------
+function showToast(message, type = 'success') {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.style.cssText = 'position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:9999;';
+    document.body.appendChild(container);
+  }
+
+  const colors = {
+    success: { bg: 'var(--success-green, #027A48)', icon: 'check_circle' },
+    warning: { bg: '#D97706', icon: 'warning' },
+    error:   { bg: 'var(--error-red, #B42318)', icon: 'error' },
+  };
+  const { bg, icon } = colors[type] || colors.success;
+
+  const toast = document.createElement('div');
+  toast.style.cssText = `background:${bg};color:#fff;padding:12px 16px;border-radius:8px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,0.2);max-width:360px;animation:slideIn 0.2s ease;`;
+  toast.innerHTML = `<i class="material-icons" style="font-size:18px;">${icon}</i><span>${escapeHtml(message)}</span>`;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s';
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
 // Debounce Helper
 function debounce(func, wait) {
   let timeout;
@@ -1095,12 +1226,19 @@ function getSelectedReviewIds() {
 }
 
 async function submitAllReviews() {
+  // Guard: require at least one approved/edited contact before submitting
+  const approvedContacts = state.extractedContacts.filter(c => c.action === 'approved' || c.action === 'edited');
+  if (approvedContacts.length === 0) {
+    showToast('No approved contacts to sync. Use the ✓ button or Bulk Approve to approve contacts first.', 'warning');
+    return;
+  }
+
   const btn = document.getElementById('btnSubmitReviews');
   const originalHtml = btn.innerHTML;
   btn.innerHTML = `<i class="material-icons" style="animation: spin 2s linear infinite;">sync</i> Syncing...`;
   btn.classList.add('disabled');
   btn.setAttribute('disabled', 'true');
-  
+
   try {
     const promises = [];
     state.selectedAccountIds.forEach(accountId => {
@@ -1121,15 +1259,20 @@ async function submitAllReviews() {
         );
       }
     });
-    
+
     if (promises.length === 0) {
-      alert("No contacts available to sync.");
+      showToast('No contacts available to sync.', 'warning');
       return;
     }
-    
+
     const results = await Promise.all(promises);
     state.syncResults = results;
-    
+
+    const totalCreated = results.reduce((s, r) => s + (r.created_count || 0), 0);
+    const totalUpdated = results.reduce((s, r) => s + (r.updated_count || 0), 0);
+    const totalFlagged = results.reduce((s, r) => s + (r.flagged_count || 0), 0);
+    showToast(`Sync complete — ${totalCreated} created, ${totalUpdated} updated${totalFlagged ? ', ' + totalFlagged + ' flagged' : ''}.`, 'success');
+
     const navSync = document.getElementById('navSyncDashboard');
     if (navSync) {
       navSync.classList.remove('disabled');
@@ -1138,7 +1281,7 @@ async function submitAllReviews() {
     switchView('viewSyncDashboard');
   } catch (err) {
     console.error("Sync failed:", err);
-    alert("An error occurred during synchronization: " + err.message);
+    showToast('Sync failed: ' + err.message, 'error');
   } finally {
     btn.innerHTML = originalHtml;
     btn.classList.remove('disabled');

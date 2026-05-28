@@ -63,7 +63,13 @@
 
       <!-- Sidebar Footer -->
       <div class="sidebar-footer">
-        <div class="avatar" id="userAvatar" title="User Profile">JD</div>
+        <div style="display:flex; align-items:center; gap:8px; overflow:hidden; flex:1; min-width:0;">
+          <div class="avatar" id="userAvatar" title="User Profile">--</div>
+          <div style="overflow:hidden; min-width:0;">
+            <div id="userDisplayName" style="font-size:12px; font-weight:700; color:var(--text-primary,#1A1A2E); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+            <a href="/logout" style="font-size:11px; color:var(--text-secondary,#535862); text-decoration:none;" onmouseover="this.style.color='var(--error-red,#B42318)'" onmouseout="this.style.color='var(--text-secondary,#535862)'">Sign out</a>
+          </div>
+        </div>
         <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" role="switch" aria-checked="false">
           <span class="theme-label" id="themeToggleLabel">Light</span>
           <div class="toggle-track">
@@ -136,13 +142,13 @@
               <table class="myk-table" id="accountsTable">
                 <thead>
                   <tr>
-                    <th style="width: 5%;"><input type="checkbox" id="selectAllCheckbox"></th>
-                    <th style="width: 25%;">Account Name</th>
-                    <th style="width: 15%;">Territory Region</th>
-                    <th style="width: 15%;">Account Status</th>
-                    <th style="width: 15%;">Payment Status</th>
-                    <th style="width: 15%;">Website</th>
-                    <th style="width: 10%;">Last Modified</th>
+                    <th style="width: 40px;"><input type="checkbox" id="selectAllCheckbox"></th>
+                    <th style="width: 22%;" class="sortable" data-sort-key="Name">Account Name <i class="material-icons sort-icon">unfold_more</i></th>
+                    <th style="width: 14%;" class="sortable" data-sort-key="Territory_Region__c">Territory Region <i class="material-icons sort-icon">unfold_more</i></th>
+                    <th style="width: 13%;" class="sortable" data-sort-key="Account_Status__c">Account Status <i class="material-icons sort-icon">unfold_more</i></th>
+                    <th style="width: 12%;" class="sortable" data-sort-key="Payments_Stage__c">Payment Status <i class="material-icons sort-icon">unfold_more</i></th>
+                    <th class="sortable" data-sort-key="Website">Website <i class="material-icons sort-icon">unfold_more</i></th>
+                    <th style="width: 13%;" class="sortable" data-sort-key="LastModifiedDate">Last Modified <i class="material-icons sort-icon">arrow_downward</i></th>
                   </tr>
                 </thead>
                 <tbody id="accountsTableBody">
