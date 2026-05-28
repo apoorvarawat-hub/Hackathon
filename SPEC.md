@@ -452,7 +452,7 @@ Discover dealership staff-related pages.
 - Respect crawl limits
 
 ### Outputs
-- Crawl results
+- Crawl results - this should be shown on the website details panel for. now just to validate the response
 - Indexed staff pages
 
 ### Success Criteria
