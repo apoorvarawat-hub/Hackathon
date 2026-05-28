@@ -571,12 +571,12 @@ OnlyValidatedContacts ==
 # 12. Technology Stack Recommendations
 
 ## Frontend
-- React
-- TypeScript
-- Material UI / Tailwind
+- Vanilla JS
+- HTML
+- Vanilla CSS
 
 ## Backend
-- Node.js or Python FastAPI
+- Python Flask
 - Queue-based crawling workers
 
 ## AI / NLP
