@@ -291,6 +291,13 @@ body, html {
   letter-spacing: 0.04em;
 }
 
+.actions-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* Dashboard Workspace Content Grid */
 .content-area {
   flex-grow: 1;
@@ -812,4 +819,128 @@ input[type="checkbox"] {
   border: 1px solid var(--success-green, #027A48);
   margin-bottom: 16px;
   font-weight: 700;
+}
+
+/* ==========================================
+   Review GUI & SPA styles
+   ========================================== */
+.row-approved td {
+  background-color: var(--success-bg, #ECFDF3) !important;
+  color: var(--success-green, #027A48) !important;
+}
+
+.row-rejected td {
+  background-color: var(--error-bg, #FEF3F2) !important;
+  color: var(--error-red, #B42318) !important;
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.row-rejected td a {
+  color: var(--error-red, #B42318) !important;
+  text-decoration: line-through;
+}
+
+.row-edited td {
+  border-left: 4px solid var(--accent-orange, #ED6D22) !important;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-active {
+  background: var(--nav-active-bg, #D3E4F1);
+  color: var(--nav-active-text, #0377B3);
+}
+
+.stat-box {
+  background: var(--bg-card, #FFFFFF);
+  border: 1px solid var(--border, #E9EAEB);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(10,13,18,0.05);
+}
+
+.nav-item.disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+/* Terminal Console for Audit Trail */
+.terminal-console {
+  background: #11141D;
+  color: #A9B2C3;
+  font-family: 'Fira Code', 'Courier New', Courier, monospace;
+  padding: 16px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border, #E9EAEB);
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.terminal-line {
+  margin-bottom: 4px;
+  white-space: pre-wrap;
+}
+
+.terminal-line.system-msg {
+  color: #8B95A6;
+}
+
+.terminal-line.info-msg {
+  color: #7EB8D9;
+}
+
+.terminal-line.create-msg {
+  color: var(--success-green, #027A48);
+}
+
+.terminal-line.update-msg {
+  color: var(--brand, #0377B3);
+}
+
+.terminal-line.skip-msg {
+  color: #FDB022; /* Warning orange-yellow */
+}
+
+.terminal-line.warn-msg {
+  color: var(--error-red, #B42318);
+  font-weight: 700;
+}
+
+/* Operation Badges */
+.badge-create {
+  background: var(--success-bg, #ECFDF3);
+  color: var(--success-green, #027A48) !important;
+}
+
+.badge-update {
+  background: var(--nav-active-bg, #D3E4F1);
+  color: var(--nav-active-text, #0377B3) !important;
+}
+
+.badge-skip {
+  background: var(--toggle-track, #E9EAEB);
+  color: var(--text-secondary, #535862) !important;
+}
+
+#shell.dark .badge-skip {
+  background: var(--border, #2E3347);
+  color: var(--text-secondary, #8B95A6) !important;
+}
+
+.badge-flag {
+  background: var(--error-bg, #FEF3F2);
+  color: var(--accent-orange, #ED6D22) !important;
 }

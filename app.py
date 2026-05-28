@@ -149,7 +149,21 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 import bs4
+from email_validator import validate_email, EmailNotValidError
+import phonenumbers
+def is_valid_email(email):
+    try:
+        validate_email(email)
+        return True
+    except EmailNotValidError:
+        return False
 
+def is_valid_phone(phone):
+    try:
+        number = phonenumbers.parse(phone, None)
+        return phonenumbers.is_possible_number(number) and phonenumbers.is_valid_number(number)
+    except Exception:
+        return False
 KEYWORDS = ['staff', 'team', 'service', 'about', 'meet', 'department', 'contact']
 
 TARGET_ROLES = [
@@ -389,7 +403,198 @@ def start_extraction():
                     "confidence": 0.88
                 })
     
+    # After extraction, add validation flags to each result
+    for item in all_results:
+        email = item.get('email', '')
+        phone = item.get('phone_number', '')
+        item['email_valid'] = is_valid_email(email)
+        item['phone_valid'] = is_valid_phone(phone)
     return jsonify({"extracted": all_results})
+
+SALESFORCE_CONTACTS = [
+    {
+        "Id": "CON-83921-1",
+        "AccountId": "ACC-83921-X3",
+        "Name": "Sarah Jenkins",
+        "Email": "sjenkins@autonation.com",
+        "Phone": "+1-480-555-0199",
+        "Title": "Owner"
+    },
+    {
+        "Id": "CON-10492-1",
+        "AccountId": "ACC-10492-Y8",
+        "Name": "Marcus Aurelius",
+        "Email": "maurelius@mykaarma.com",
+        "Phone": "+1-206-555-0144",
+        "Title": "General Manager"
+    },
+    {
+        "Id": "CON-29481-1",
+        "AccountId": "ACC-29481-W4",
+        "Name": "Jane Smith",
+        "Email": "jsmith@hendrickhonda.com",
+        "Phone": "(704) 555-1234",
+        "Title": "Fixed Operations Director"
+    },
+    {
+        "Id": "CON-29481-2",
+        "AccountId": "ACC-29481-W4",
+        "Name": "Michael Chang",
+        "Email": "mchang@hendrickhonda.com",
+        "Phone": "(704) 555-0000",
+        "Title": "GM"
+    }
+]
+
+REVIEWED_CONTACTS = {}
+
+@app.route('/api/review/submit', methods=['POST'])
+def submit_review():
+    data = request.get_json()
+    if not data or 'accountId' not in data or 'contacts' not in data:
+        return jsonify({"error": "Missing accountId or contacts"}), 400
+        
+    account_id = data['accountId']
+    contacts = data['contacts']
+    
+    account = next((a for a in SALESFORCE_ACCOUNTS if a['Id'] == account_id), None)
+    if not account:
+        return jsonify({"error": f"Account with ID {account_id} not found"}), 404
+        
+    validated_contacts = []
+    rejected_count = 0
+    approved_count = 0
+    
+    created_count = 0
+    updated_count = 0
+    skipped_count = 0
+    flagged_count = 0
+    
+    audit_trail = []
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    audit_trail.append(f"[{timestamp}] INFO: Sync initiated for Account {account_id} ({account['Name']})")
+    
+    def clean_phone(p):
+        return "".join(c for c in p if c.isdigit()) if p else ""
+        
+    for c in contacts:
+        action = c.get('action', 'pending')
+        if action == 'rejected':
+            rejected_count += 1
+            audit_trail.append(f"[{timestamp}] INFO: Contact '{c.get('full_name')}' was rejected by user. Skipping sync.")
+            continue
+            
+        if action not in ['approved', 'edited']:
+            continue
+            
+        approved_count += 1
+        
+        email = c.get('email', '').strip().lower()
+        full_name = c.get('full_name', '').strip().lower()
+        phone = clean_phone(c.get('phone_number', ''))
+        title = c.get('normalized_role', c.get('title', '')).strip()
+        
+        # 1. Match by Email
+        email_match = next((x for x in SALESFORCE_CONTACTS if x.get('Email', '').strip().lower() == email), None)
+        
+        # 2. Match by Name + Account
+        name_acc_match = next((x for x in SALESFORCE_CONTACTS if x.get('Name', '').strip().lower() == full_name and x.get('AccountId') == account_id), None)
+        
+        # 3. Match by Phone + Account
+        phone_acc_match = None
+        if phone:
+            phone_acc_match = next((x for x in SALESFORCE_CONTACTS if clean_phone(x.get('Phone', '')) == phone and x.get('AccountId') == account_id), None)
+            
+        operation = ""
+        status_str = ""
+        error_msg = ""
+        matched_id = None
+        
+        if email_match:
+            matched_id = email_match.get('Id')
+            if email_match.get('Name', '').strip().lower() == full_name:
+                phone_same = clean_phone(email_match.get('Phone', '')) == phone
+                title_same = email_match.get('Title', '').strip().lower() == title.lower()
+                if phone_same and title_same:
+                    operation = "Skip Duplicate"
+                    status_str = "Skipped"
+                    error_msg = "Duplicate: Exact match already exists in Salesforce."
+                    skipped_count += 1
+                    audit_trail.append(f"[{timestamp}] SKIP: Contact '{c.get('full_name')}' matches existing contact {matched_id} exactly. Skipped.")
+                else:
+                    operation = "Update Existing Contact"
+                    status_str = "Updated"
+                    email_match['Phone'] = c.get('phone_number', '')
+                    email_match['Title'] = title
+                    updated_count += 1
+                    audit_trail.append(f"[{timestamp}] UPDATE: Updated contact {matched_id} ({c.get('full_name')}) with title='{title}' and phone='{c.get('phone_number')}'")
+            else:
+                operation = "Flag Ambiguous Match"
+                status_str = "Flagged"
+                error_msg = f"Email matches existing CRM contact '{email_match.get('Name')}' ({matched_id}), but Name differs."
+                flagged_count += 1
+                audit_trail.append(f"[{timestamp}] WARNING: Flagged duplicate email '{email}' for '{c.get('full_name')}'. Matches '{email_match.get('Name')}' in CRM.")
+                
+        elif name_acc_match:
+            matched_id = name_acc_match.get('Id')
+            operation = "Update Existing Contact"
+            status_str = "Updated"
+            name_acc_match['Email'] = c.get('email', '')
+            name_acc_match['Phone'] = c.get('phone_number', '')
+            name_acc_match['Title'] = title
+            updated_count += 1
+            audit_trail.append(f"[{timestamp}] UPDATE: Updated contact {matched_id} ({c.get('full_name')}) with email='{c.get('email')}' and phone='{c.get('phone_number')}'")
+            
+        elif phone_acc_match:
+            matched_id = phone_acc_match.get('Id')
+            operation = "Flag Ambiguous Match"
+            status_str = "Flagged"
+            error_msg = f"Phone matches existing CRM contact '{phone_acc_match.get('Name')}' ({matched_id}), but Name/Email differ."
+            flagged_count += 1
+            audit_trail.append(f"[{timestamp}] WARNING: Flagged duplicate phone '{c.get('phone_number')}' for '{c.get('full_name')}'. Matches '{phone_acc_match.get('Name')}' in CRM.")
+            
+        else:
+            new_id = f"CON-{account_id}-{len(SALESFORCE_CONTACTS) + 1}"
+            new_contact = {
+                "Id": new_id,
+                "AccountId": account_id,
+                "Name": c.get('full_name', ''),
+                "Email": c.get('email', ''),
+                "Phone": c.get('phone_number', ''),
+                "Title": title
+            }
+            SALESFORCE_CONTACTS.append(new_contact)
+            matched_id = new_id
+            operation = "Create Contact"
+            status_str = "Created"
+            created_count += 1
+            audit_trail.append(f"[{timestamp}] CREATE: Created new contact {new_id} ({c.get('full_name')}) as {title}")
+            
+        sync_contact = c.copy()
+        sync_contact['operation'] = operation
+        sync_contact['status'] = status_str
+        sync_contact['error'] = error_msg
+        sync_contact['contact_id'] = matched_id
+        validated_contacts.append(sync_contact)
+        
+    REVIEWED_CONTACTS[account_id] = validated_contacts
+    account['ReviewedStaff'] = validated_contacts
+    
+    audit_trail.append(f"[{timestamp}] INFO: Sync completed. Created: {created_count}, Updated: {updated_count}, Skipped: {skipped_count}, Flagged: {flagged_count}")
+    
+    return jsonify({
+        "status": "success",
+        "accountId": account_id,
+        "approved_count": approved_count,
+        "rejected_count": rejected_count,
+        "created_count": created_count,
+        "updated_count": updated_count,
+        "skipped_count": skipped_count,
+        "flagged_count": flagged_count,
+        "contacts": validated_contacts,
+        "audit_trail": audit_trail
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)
+

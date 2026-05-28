@@ -431,6 +431,13 @@ If multiple Accounts are selected:
 
 ---
 
+# Feedback: Header Button Alignment
+
+## Observation
+The **Refresh**, **Start Discovery**, and **Extract Staff** buttons should be in the same alignment.
+
+---
+
 ## Milestone 3 — Agent Crawls Website
 
 ### Objective
@@ -898,6 +905,3 @@ The solution balances:
 By introducing a human-in-the-loop review workflow, the platform avoids the risks associated with direct autonomous CRM mutation while significantly reducing manual dealership research effort.
 
 This creates a practical foundation for AI-assisted Salesforce enrichment at scale.
-
-
-

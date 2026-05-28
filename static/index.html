@@ -96,7 +96,7 @@
       </header>
 
       <!-- Workspace Content (Grid Layout) -->
-      <div class="content-area">
+      <div class="content-area" id="viewAccountSelect">
         
         <!-- Search & Selection Panel (Left Card) -->
         <section class="myk-card" id="searchPanelCard">
@@ -254,6 +254,174 @@
         </section>
 
       </div>
+
+      <!-- Crawl Progress View -->
+      <div class="content-area" id="viewCrawlProgress" style="display: none;">
+         <!-- Left Card: Crawl Details & Log -->
+         <section class="myk-card" style="grid-column: span 2;">
+           <div class="myk-card-header">
+             <h6 class="myk-h6">Discovery & Crawl Progress</h6>
+             <span class="myk-subtitle1" id="crawlProgressStatus">Idle</span>
+           </div>
+           <div class="myk-card-body" style="gap: 20px;">
+             <div class="progress-bar-container" style="background: var(--border); border-radius: 4px; height: 8px; overflow: hidden; width: 100%;">
+               <div id="crawlProgressBar" style="background: var(--brand); width: 0%; height: 100%; transition: width 0.3s ease;"></div>
+             </div>
+             <div style="display: flex; gap: 24px;">
+               <div class="stat-box" style="flex: 1; border: 1px solid var(--border); border-radius: 6px; padding: 16px; text-align: center;">
+                 <div class="myk-subtitle1">Accounts Crawled</div>
+                 <div class="myk-h2" id="crawlStatAccounts">0</div>
+               </div>
+               <div class="stat-box" style="flex: 1; border: 1px solid var(--border); border-radius: 6px; padding: 16px; text-align: center;">
+                 <div class="myk-subtitle1">Pages Found</div>
+                 <div class="myk-h2" id="crawlStatPages">0</div>
+               </div>
+             </div>
+             <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+               <table class="myk-table">
+                 <thead>
+                   <tr>
+                     <th>Account</th>
+                     <th>Status</th>
+                     <th>Details</th>
+                   </tr>
+                 </thead>
+                 <tbody id="crawlProgressTableBody">
+                   <!-- Dynamically populated -->
+                 </tbody>
+               </table>
+             </div>
+           </div>
+         </section>
+      </div>
+
+      <!-- Review Queue View -->
+      <div class="content-area" id="viewReviewQueue" style="display: none;">
+         <!-- Left Card: Contact Grid -->
+         <section class="myk-card" id="reviewGridCard">
+           <div class="myk-card-header" style="flex-wrap: wrap; gap: 12px;">
+             <div>
+               <h6 class="myk-h6">Review Queue</h6>
+               <span class="myk-subtitle1" id="reviewQueueCount">0 Contacts to review</span>
+             </div>
+             <div style="display: flex; gap: 8px; margin-left: auto;">
+               <button class="tb-btn secondary" id="btnBulkApprove"><i class="material-icons" style="font-size: 14px; margin-right: 4px;">check_circle</i> Bulk Approve</button>
+               <button class="tb-btn secondary" id="btnBulkReject" style="color: var(--error-red); border-color: var(--error-red);"><i class="material-icons" style="font-size: 14px; margin-right: 4px;">cancel</i> Bulk Reject</button>
+             </div>
+           </div>
+           
+           <div class="myk-card-body">
+             <div class="table-container">
+               <table class="myk-table" id="reviewTable">
+                 <thead>
+                   <tr>
+                     <th style="width: 5%;"><input type="checkbox" id="selectReviewAllCheckbox"></th>
+                     <th style="width: 20%;">Name</th>
+                     <th style="width: 20%;">Role</th>
+                     <th style="width: 25%;">Email</th>
+                     <th style="width: 15%;">Phone</th>
+                     <th style="width: 10%;">Confidence</th>
+                     <th style="width: 10%;">Actions</th>
+                   </tr>
+                 </thead>
+                 <tbody id="reviewTableBody">
+                   <!-- Extracted staff rows to review -->
+                 </tbody>
+               </table>
+             </div>
+           </div>
+         </section>
+
+         <!-- Right Card: Context & Sync Actions -->
+         <section class="myk-card" id="reviewContextCard">
+           <div class="myk-card-header">
+             <h6 class="myk-h6">Review Summary</h6>
+           </div>
+           <div class="myk-card-body" style="gap: 16px; justify-content: flex-start;">
+             <div class="detail-row">
+               <div class="detail-label">Total Selected Accounts</div>
+               <div class="detail-value" id="reviewSummaryAccounts">0</div>
+             </div>
+             <div class="detail-row">
+               <div class="detail-label">Approved Contacts</div>
+               <div class="detail-value success" id="reviewSummaryApproved" style="color: var(--success-green); font-weight: 700;">0</div>
+             </div>
+             <div class="detail-row">
+               <div class="detail-label">Rejected Contacts</div>
+               <div class="detail-value error" id="reviewSummaryRejected" style="color: var(--error-red); font-weight: 700;">0</div>
+             </div>
+             <div class="detail-row">
+               <div class="detail-label">Pending Review</div>
+               <div class="detail-value" id="reviewSummaryPending">0</div>
+             </div>
+             
+             <button class="tb-btn primary" id="btnSubmitReviews" style="margin-top: auto; height: 40px; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+               <i class="material-icons">cloud_upload</i> Sync Approved to Salesforce
+             </button>
+           </div>
+         </section>
+      </div>
+
+      <!-- Sync Dashboard View -->
+      <div class="content-area" id="viewSyncDashboard" style="display: none;">
+         <!-- Full-width card -->
+         <section class="myk-card" style="grid-column: span 2;">
+           <div class="myk-card-header">
+             <h6 class="myk-h6">Salesforce Synchronization Results</h6>
+             <button class="tb-btn secondary" id="btnBackToAccounts"><i class="material-icons" style="margin-right: 4px;">arrow_back</i> Back to Account Selection</button>
+           </div>
+           <div class="myk-card-body" style="gap: 20px;">
+             <div style="display: flex; gap: 24px; justify-content: center; margin-bottom: 12px;">
+               <div class="stat-box" style="border: 1px solid var(--border); border-radius: 6px; padding: 20px; text-align: center; min-width: 150px;">
+                 <div class="myk-subtitle1">Sync Status</div>
+                 <div class="myk-h4" style="color: var(--success-green); margin-top: 8px;">Success</div>
+               </div>
+               <div class="stat-box" style="border: 1px solid var(--border); border-radius: 6px; padding: 20px; text-align: center; min-width: 150px;">
+                 <div class="myk-subtitle1">Contacts Created</div>
+                 <div class="myk-h2" id="syncStatCreated" style="color: var(--success-green);">0</div>
+               </div>
+               <div class="stat-box" style="border: 1px solid var(--border); border-radius: 6px; padding: 20px; text-align: center; min-width: 150px;">
+                 <div class="myk-subtitle1">Contacts Updated</div>
+                 <div class="myk-h2" id="syncStatUpdated" style="color: var(--brand);">0</div>
+               </div>
+               <div class="stat-box" style="border: 1px solid var(--border); border-radius: 6px; padding: 20px; text-align: center; min-width: 150px;">
+                 <div class="myk-subtitle1">Sync Failures</div>
+                 <div class="myk-h2" id="syncStatFailed" style="color: var(--error-red);">0</div>
+               </div>
+             </div>
+             
+             <div class="table-container">
+               <table class="myk-table">
+                 <thead>
+                   <tr>
+                     <th>Account ID</th>
+                     <th>Contact Name</th>
+                     <th>Email</th>
+                     <th>Role</th>
+                     <th>Operation</th>
+                     <th>Status</th>
+                   </tr>
+                 </thead>
+                 <tbody id="syncResultsTableBody">
+                   <!-- Dynamically populated -->
+                 </tbody>
+               </table>
+             </div>
+
+             <!-- Sync Audit Trail Console -->
+             <div class="audit-trail-container" style="margin-top: 20px;">
+               <div class="form-label" style="margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                 <i class="material-icons" style="font-size: 16px;">receipt_long</i>
+                 Salesforce Synchronization Audit Trail Log
+               </div>
+               <div id="syncAuditTrailConsole" class="terminal-console">
+                 <div class="terminal-line system-msg">Console ready. Waiting for sync run...</div>
+               </div>
+             </div>
+           </div>
+         </section>
+      </div>
+
     </main>
   </div>
 
@@ -272,6 +440,40 @@
       </div>
       <div class="modal-footer">
         <button class="tb-btn primary" id="btnAcknowledgeModal">Acknowledge & Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Contact Modal -->
+  <div id="editContactModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="myk-h6">Edit Contact Details</h6>
+        <button class="icon-btn" id="btnCancelEditContact"><i class="material-icons">close</i></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="editContactName" class="form-label">Full Name</label>
+          <input type="text" id="editContactName" class="myk-input">
+        </div>
+        <div class="form-group">
+          <label for="editContactRole" class="form-label">Role</label>
+          <input type="text" id="editContactRole" class="myk-input">
+        </div>
+        <div class="form-group">
+          <label for="editContactEmail" class="form-label">Email</label>
+          <input type="email" id="editContactEmail" class="myk-input">
+          <span id="editContactEmailWarn" style="font-size: 11px; color: var(--error-red); display: none; margin-top: 4px;">Invalid Email Format</span>
+        </div>
+        <div class="form-group">
+          <label for="editContactPhone" class="form-label">Phone</label>
+          <input type="text" id="editContactPhone" class="myk-input">
+          <span id="editContactPhoneWarn" style="font-size: 11px; color: var(--error-red); display: none; margin-top: 4px;">Invalid Phone Format</span>
+        </div>
+      </div>
+      <div class="modal-footer" style="gap: 8px;">
+        <button class="tb-btn secondary" id="btnDiscardEditContact">Cancel</button>
+        <button class="tb-btn primary" id="btnSaveEditContact">Save Changes</button>
       </div>
     </div>
   </div>
