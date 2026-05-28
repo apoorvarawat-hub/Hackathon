@@ -326,6 +326,25 @@ function renderAccountDetails() {
   websiteLink.href = acc.Website || '#';
   websiteText.textContent = acc.Website || 'No Website';
   
+  // Crawled Pages
+  const crawledContainer = document.getElementById('crawledPagesContainer');
+  const crawledList = document.getElementById('crawledPagesList');
+  if (acc.CrawledPages && acc.CrawledPages.length > 0) {
+    crawledList.innerHTML = acc.CrawledPages.map(page => `
+      <li class="validation-item" style="background: var(--nav-active-bg, #D3E4F1); border-color: var(--nav-active-text, #0377B3);">
+        <a href="${escapeHtml(page)}" target="_blank" rel="noopener" style="color: var(--nav-active-text, #0377B3); text-decoration: none; display: flex; align-items: center; gap: 4px;">
+          <i class="material-icons" style="font-size: 16px;">link</i> ${escapeHtml(page)}
+        </a>
+      </li>
+    `).join('');
+    crawledContainer.style.display = 'block';
+  } else if (acc.CrawledPages && acc.CrawledPages.length === 0) {
+    crawledList.innerHTML = `<li class="validation-item" style="background: var(--error-bg); border-color: var(--error-red); color: var(--error-red);">No staff pages discovered during crawl.</li>`;
+    crawledContainer.style.display = 'block';
+  } else {
+    crawledContainer.style.display = 'none';
+  }
+  
   // Enable Action Buttons
   enableActionButtons();
 }
@@ -423,14 +442,7 @@ function setupEventListeners() {
     }
   });
   
-  // Copy Account ID Button
-  const copyBtn = document.getElementById('btnCopyId');
-  copyBtn.addEventListener('click', (e) => {
-    if (state.selectedAccountIds.size === 1) {
-      const selectedId = Array.from(state.selectedAccountIds)[0];
-      copyToClipboard(selectedId, e.target);
-    }
-  });
+
 
   // Start Discovery Button Action
   const btnStart = document.getElementById('btnStartDiscovery');
@@ -468,6 +480,22 @@ function setupEventListeners() {
         });
         
         const result = await response.json();
+        
+        // Merge discovery results into state
+        if (result.valid) {
+          result.valid.forEach(v => {
+            const acc = state.accounts.find(a => a.Id === v.Id);
+            if (acc) acc.CrawledPages = v.CrawledPages;
+          });
+        }
+        if (result.invalid) {
+          result.invalid.forEach(inv => {
+            const acc = state.accounts.find(a => a.Id === inv.Id);
+            if (acc) acc.Dawn_Status__c = inv.Dawn_Status__c;
+          });
+        }
+        renderAccountDetails();
+        
         showValidationModal(result);
       } catch (error) {
         console.error('Failed to start discovery:', error);
