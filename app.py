@@ -148,46 +148,55 @@ import urllib.request
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-TARGET_PAGES = [
-    '/staff', '/team', '/service', '/about-us', 
-    '/meet-our-staff', '/departments', '/contact-us',
-    '/about-us/staff', '/about-us/staff/'
-]
+import re
 
-def check_url(base_url, path):
-    url = base_url.rstrip('/') + path
+KEYWORDS = ['staff', 'team', 'service', 'about', 'meet', 'department', 'contact']
+
+def crawl_website(base_url):
     req = urllib.request.Request(
-        url, 
+        base_url, 
         headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     )
     try:
-        # Timeout to ensure fast crawling
-        response = urllib.request.urlopen(req, timeout=5)
-        if response.status == 200:
-            return url
+        response = urllib.request.urlopen(req, timeout=10)
+        html = response.read().decode('utf-8', errors='ignore')
     except urllib.error.HTTPError as e:
-        # Hackathon Demo Bypass for Cloudflare protected demo sites
         if e.code in [403, 503]:
-            # If the site blocks us completely (Cloudflare), we inject the known valid paths for the demo
-            if 'hendrickhonda' in base_url and path in ['/about-us/staff', '/about-us/staff/']:
-                return url
-            if 'autonation' in base_url and path in ['/about-us', '/staff']:
-                return url
-            if 'sewell' in base_url and path in ['/team', '/about-us']:
-                return url
+            return "BLOCKED"
+        return []
     except Exception:
-        pass
-    return None
-
-def crawl_website(base_url):
+        return []
+        
+    # Extract links
+    links = re.findall(r'href=[\'"]?([^\'" >]+)', html, flags=re.IGNORECASE)
+    
     discovered = []
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        future_to_path = {executor.submit(check_url, base_url, path): path for path in TARGET_PAGES}
-        for future in as_completed(future_to_path):
-            result = future.result()
-            if result:
-                discovered.append(result)
-    return discovered
+    base_parsed = urllib.parse.urlparse(base_url)
+    
+    for link in links:
+        link = link.strip()
+        if not link or link.startswith('javascript:') or link.startswith('mailto:') or link.startswith('tel:'):
+            continue
+            
+        parsed_link = urllib.parse.urlparse(link)
+        
+        # Check if internal
+        if parsed_link.netloc and parsed_link.netloc != base_parsed.netloc:
+            base_domain = base_parsed.netloc.replace('www.', '')
+            link_domain = parsed_link.netloc.replace('www.', '')
+            if base_domain not in link_domain:
+                continue
+                
+        # Filter for keywords
+        path_lower = parsed_link.path.lower()
+        if any(keyword in path_lower for keyword in KEYWORDS):
+            # Normalize to absolute URL
+            full_url = urllib.parse.urljoin(base_url, link)
+            if full_url not in discovered:
+                discovered.append(full_url)
+                
+    # Limit results so the UI isn't overwhelmed
+    return discovered[:20]
 
 @app.route('/api/discovery/start', methods=['POST'])
 def start_discovery():
@@ -215,13 +224,26 @@ def start_discovery():
             if is_valid:
                 print(f"Audit Log: Account {acc['Id']} ({acc['Name']}) valid URL. Starting crawl...")
                 discovered = crawl_website(website)
-                acc['CrawledPages'] = discovered
-                valid_accounts.append({
-                    "Id": acc['Id'],
-                    "Name": acc['Name'],
-                    "Website": website,
-                    "CrawledPages": discovered
-                })
+                
+                if discovered == "BLOCKED":
+                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    reason = f"Blocked - {timestamp}"
+                    acc['Dawn_Status__c'] = reason
+                    invalid_accounts.append({
+                        "Id": acc['Id'],
+                        "Name": acc['Name'],
+                        "Reason": "Blocked by firewall (403)",
+                        "Dawn_Status__c": reason
+                    })
+                    print(f"Audit Log: Account {acc['Id']} ({acc['Name']}) failed crawl. Reason: {reason}")
+                else:
+                    acc['CrawledPages'] = discovered
+                    valid_accounts.append({
+                        "Id": acc['Id'],
+                        "Name": acc['Name'],
+                        "Website": website,
+                        "CrawledPages": discovered
+                    })
             else:
                 timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 reason = f"No website available - {timestamp}"
