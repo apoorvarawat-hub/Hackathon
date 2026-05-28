@@ -345,6 +345,28 @@ function renderAccountDetails() {
     crawledContainer.style.display = 'none';
   }
   
+  // Extraction Results
+  const extractionContainer = document.getElementById('extractionContainer');
+  const extractionList = document.getElementById('extractionList');
+  if (acc.ExtractedStaff && acc.ExtractedStaff.length > 0) {
+    extractionList.innerHTML = acc.ExtractedStaff.map(staff => `
+      <tr style="border-bottom: 1px solid var(--border, #E9EAEB);">
+        <td style="padding: 6px; font-weight: 600;">${escapeHtml(staff.full_name)}</td>
+        <td style="padding: 6px;">${escapeHtml(staff.normalized_role)}</td>
+        <td style="padding: 6px;">
+          <div style="margin-bottom: 2px;"><a href="mailto:${escapeHtml(staff.email)}">${escapeHtml(staff.email)}</a></div>
+          <div>${escapeHtml(staff.phone_number)}</div>
+        </td>
+        <td style="padding: 6px;">
+          <span class="status-badge status-active">${(staff.confidence * 100).toFixed(0)}%</span>
+        </td>
+      </tr>
+    `).join('');
+    extractionContainer.style.display = 'block';
+  } else {
+    extractionContainer.style.display = 'none';
+  }
+  
   // Enable Action Buttons
   enableActionButtons();
 }
@@ -352,23 +374,47 @@ function renderAccountDetails() {
 function enableActionButtons() {
   const btnStart = document.getElementById('btnStartDiscovery');
   const btnExport = document.getElementById('btnExport');
+  const btnExtractStaff = document.getElementById('btnExtractStaff');
   
   btnStart.classList.remove('disabled');
   btnStart.removeAttribute('disabled');
   
-  btnExport.classList.remove('disabled');
-  btnExport.removeAttribute('disabled');
+  if (btnExport) {
+    btnExport.classList.remove('disabled');
+    btnExport.removeAttribute('disabled');
+  }
+
+  // Only enable extract if at least one selected account has crawled pages
+  const canExtract = Array.from(state.selectedAccountIds).some(id => {
+    const acc = state.accounts.find(a => a.Id === id);
+    return acc && acc.CrawledPages && acc.CrawledPages.length > 0;
+  });
+
+  if (canExtract && btnExtractStaff) {
+    btnExtractStaff.classList.remove('disabled');
+    btnExtractStaff.removeAttribute('disabled');
+  } else if (btnExtractStaff) {
+    btnExtractStaff.classList.add('disabled');
+    btnExtractStaff.setAttribute('disabled', 'true');
+  }
 }
 
 function disableActionButtons() {
   const btnStart = document.getElementById('btnStartDiscovery');
   const btnExport = document.getElementById('btnExport');
+  const btnExtractStaff = document.getElementById('btnExtractStaff');
   
   btnStart.classList.add('disabled');
   btnStart.setAttribute('disabled', 'true');
   
-  btnExport.classList.add('disabled');
-  btnExport.setAttribute('disabled', 'true');
+  if (btnExport) {
+    btnExport.classList.add('disabled');
+    btnExport.setAttribute('disabled', 'true');
+  }
+  if (btnExtractStaff) {
+    btnExtractStaff.classList.add('disabled');
+    btnExtractStaff.setAttribute('disabled', 'true');
+  }
 }
 
 // ------------------------------------------
@@ -442,7 +488,75 @@ function setupEventListeners() {
     }
   });
   
+  // Extract Staff Button Action
+  const btnExtractStaff = document.getElementById('btnExtractStaff');
+  if (btnExtractStaff) {
+    btnExtractStaff.addEventListener('click', async () => {
+      const urlsToExtract = [];
+      state.selectedAccountIds.forEach(id => {
+        const acc = state.accounts.find(a => a.Id === id);
+        if (acc && acc.CrawledPages) {
+          urlsToExtract.push(...acc.CrawledPages);
+        }
+      });
+      
+      if (urlsToExtract.length === 0) return;
+      
+      const originalText = btnExtractStaff.innerHTML;
+      btnExtractStaff.innerHTML = "Extracting...";
+      btnExtractStaff.classList.add('disabled');
+      btnExtractStaff.setAttribute('disabled', 'true');
+      
+      try {
+        const response = await fetch('/api/extraction/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: urlsToExtract })
+        });
+        
+        const result = await response.json();
+        
+        const primaryId = Array.from(state.selectedAccountIds)[0];
+        const acc = state.accounts.find(a => a.Id === primaryId);
+        if (acc) {
+          acc.ExtractedStaff = result.extracted;
+        }
+        
+        renderAccountDetails();
+      } catch (error) {
+        console.error('Failed to extract staff:', error);
+        alert('An error occurred during staff extraction.');
+      } finally {
+        btnExtractStaff.innerHTML = originalText;
+        enableActionButtons();
+      }
+    });
+  }
 
+  const btnExportStaff = document.getElementById('btnExportStaff');
+  if (btnExportStaff) {
+    btnExportStaff.addEventListener('click', () => {
+      const primaryId = Array.from(state.selectedAccountIds)[0];
+      const acc = state.accounts.find(a => a.Id === primaryId);
+      if (acc && acc.ExtractedStaff) {
+        const headers = ["Full Name", "Title", "Normalized Role", "Email", "Phone Number", "Department", "Confidence", "Source URL"];
+        const rows = acc.ExtractedStaff.map(s => [
+          s.full_name, s.title, s.normalized_role, s.email, s.phone_number, s.department, s.confidence, s.source_url
+        ]);
+        const csvContent = "data:text/csv;charset=utf-8," 
+          + headers.join(",") + "\n" 
+          + rows.map(e => e.map(field => `"${(field || '').toString().replace(/"/g, '""')}"`).join(",")).join("\n");
+        
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `staff_extraction_${acc.Id}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    });
+  }
 
   // Start Discovery Button Action
   const btnStart = document.getElementById('btnStartDiscovery');

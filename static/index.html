@@ -84,10 +84,15 @@
           <nav class="breadcrumb" id="breadcrumbTrail" aria-label="Breadcrumb">Home › Discovery Agent</nav>
         </div>
         
-        <div style="margin-left: auto; display: flex; gap: 8px;">
-          <button class="tb-btn secondary disabled" id="btnExport" disabled>Export CSV</button>
-          <button class="tb-btn primary disabled" id="btnStartDiscovery" disabled>Start Discovery</button>
-        </div>
+        <div class="actions-right">
+                <button class="tb-btn secondary" id="btnRefreshGrid">
+                  <i class="material-icons">refresh</i> Refresh
+                </button>
+                <button class="tb-btn primary disabled" id="btnStartDiscovery" disabled>Start Discovery</button>
+                <button class="tb-btn primary disabled" id="btnExtractStaff" disabled style="margin-left: 8px;">
+                  <i class="material-icons">person_search</i> Extract Staff
+                </button>
+              </div>
       </header>
 
       <!-- Workspace Content (Grid Layout) -->
@@ -193,11 +198,6 @@
               </div>
               
               <div class="detail-row">
-                <div class="detail-label">Account Name</div>
-                <div class="detail-value bold" id="accFieldName">Dealership Name</div>
-              </div>
-              
-              <div class="detail-row">
                 <div class="detail-label">Territory Region</div>
                 <div class="detail-value" id="accFieldRegion">Northwest</div>
               </div>
@@ -215,6 +215,39 @@
               <div class="detail-row">
                 <div class="detail-label">Last Modified Date</div>
                 <div class="detail-value" id="accFieldLastModified">1/1/2026</div>
+              </div>
+              
+              <!-- Crawled Pages Section -->
+              <div class="crawled-pages-container" id="crawledPagesContainer" style="display: none; margin-top: 16px; border-top: 1px solid var(--border, #E9EAEB); padding-top: 16px;">
+                <div class="detail-label" style="margin-bottom: 8px; font-weight: 600;">Discovered Staff Pages</div>
+                <ul class="validation-list" id="crawledPagesList" style="margin-top: 0; font-size: 13px;">
+                  <!-- Injected via JS -->
+                </ul>
+              </div>
+              
+              <!-- Extraction Results Section -->
+              <div class="extraction-container" id="extractionContainer" style="display: none; margin-top: 16px; border-top: 1px solid var(--border, #E9EAEB); padding-top: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <div class="detail-label" style="font-weight: 600; color: var(--text-dark, #232B32);">Extracted Staff Intelligence</div>
+                  <button class="tb-btn secondary" id="btnExportStaff" style="padding: 4px 8px; font-size: 11px; height: auto;">
+                    <i class="material-icons" style="font-size: 14px;">download</i> Export
+                  </button>
+                </div>
+                <div class="table-container" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border, #E9EAEB); border-radius: 4px;">
+                  <table class="tb-table" style="font-size: 11px; margin: 0; width: 100%;">
+                    <thead style="position: sticky; top: 0; background: #fff; z-index: 1;">
+                      <tr>
+                        <th style="padding: 6px;">Name</th>
+                        <th style="padding: 6px;">Role</th>
+                        <th style="padding: 6px;">Contact</th>
+                        <th style="padding: 6px;">Score</th>
+                      </tr>
+                    </thead>
+                    <tbody id="extractionList">
+                      <!-- Injected via JS -->
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
