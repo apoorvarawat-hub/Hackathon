@@ -613,6 +613,70 @@ Provide a trusted review workflow before Salesforce mutation.
 - Edited records
 
 ---
+# Feedback After Milestone 6 — Review/Edit Flow and Account Selection Constraints
+
+## Observation
+After Milestone 6 validation, the staff review workflow and Account selection behavior need additional refinements.
+
+## Issues Identified
+- After staff information is extracted, users cannot currently update or edit the fetched information before approval.
+- The Account selection screen currently allows more Accounts than desired for the initial workflow.
+- `Account_Status__c` should not be user-controlled from the filter UI for this workflow.
+
+## Required Enhancements
+
+### Editable Staff Review
+After staff information is extracted, the Review GUI must allow users to edit fetched contact information before approval.
+
+Editable fields should include:
+- Name
+- Title / Role
+- Email
+- Phone
+- Department
+- Source URL, if needed
+
+### Account Selection Limit
+The Account selection screen should limit the user to selecting a maximum of 10 Accounts.
+
+If the user attempts to select more than 10 Accounts:
+- Prevent the additional selection
+- Display a validation message explaining the 10 Account limit
+
+### Account Status Backend Filter
+Remove Account Status from the visible filter UI.
+
+Instead, the backend query must automatically filter Accounts where:
+
+```sql
+Account_Status__c = 'Prospect'
+```
+
+## Updated Query Requirement
+
+```sql
+SELECT
+  Id,
+  Name,
+  Territory_Region__c,
+  Payments_Stage__c,
+  Website,
+  LastModifiedDate
+FROM Account
+WHERE Website != null
+AND Account_Status__c = 'Prospect'
+ORDER BY LastModifiedDate DESC
+LIMIT 200
+```
+
+## Success Criteria
+- Users can edit extracted staff details before approving Salesforce updates.
+- Users cannot select more than 10 Accounts.
+- Account Status is removed from the UI filters.
+- Backend query only returns Accounts with `Account_Status__c = 'Prospect'`.
+- Review flow supports user correction before Salesforce create/update.
+
+---
 
 ## Milestone 7 — Salesforce Create/Update
 

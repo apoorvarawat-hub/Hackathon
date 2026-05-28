@@ -1,4 +1,6 @@
 import os
+import asyncio
+from scraper import run_scraper
 from flask import Flask, jsonify, request
 
 app = Flask(__name__, static_folder='static', static_url_path='')
@@ -9,9 +11,9 @@ SALESFORCE_ACCOUNTS = [
         "Id": "ACC-83921-X3",
         "Name": "AutoNation Ford of North Scottsdale",
         "Territory_Region__c": "Southwest",
-        "Account_Status__c": "Active",
+        "Account_Status__c": "Prospect",
         "Payments_Stage__c": "Paid",
-        "Website": "https://www.autonationfordnorthscottsdale.com",
+        "Website": "https://www.victorynissannashville.com",
         "Dawn_Status__c": "",
         "LastModifiedDate": "2026-05-27T10:00:00Z",
         "Phone": "+1-480-555-0199",
@@ -23,9 +25,9 @@ SALESFORCE_ACCOUNTS = [
         "Id": "ACC-10492-Y8",
         "Name": "myKaarma Premium Auto Dealership",
         "Territory_Region__c": "Pacific Northwest",
-        "Account_Status__c": "Active",
+        "Account_Status__c": "Prospect",
         "Payments_Stage__c": "Trial",
-        "Website": "https://www.mykaarmapremiumdealers.com",
+        "Website": "https://www.94nissan.com",
         "Dawn_Status__c": "",
         "LastModifiedDate": "2026-05-26T14:30:00Z",
         "Phone": "+1-206-555-0144",
@@ -37,7 +39,7 @@ SALESFORCE_ACCOUNTS = [
         "Id": "ACC-57382-Z2",
         "Name": "Penske Chevrolet Indianapolis",
         "Territory_Region__c": "Midwest",
-        "Account_Status__c": "Active",
+        "Account_Status__c": "Prospect",
         "Payments_Stage__c": "Paid",
         "Website": "www.penskechevrolet.com", # Invalid because no http/https
         "Dawn_Status__c": "",
@@ -51,9 +53,9 @@ SALESFORCE_ACCOUNTS = [
         "Id": "ACC-29481-W4",
         "Name": "Hendrick Honda Charlotte",
         "Territory_Region__c": "Southeast",
-        "Account_Status__c": "Inactive",
+        "Account_Status__c": "Prospect",
         "Payments_Stage__c": "Pending",
-        "Website": "https://www.hendrickhonda.com",
+        "Website": "https://www.aberdeenchrysler.com",
         "Dawn_Status__c": "",
         "LastModifiedDate": "2026-05-24T16:45:00Z",
         "Phone": "+1-704-555-0188",
@@ -65,9 +67,9 @@ SALESFORCE_ACCOUNTS = [
         "Id": "ACC-90412-V9",
         "Name": "Sewell Lexus of Dallas",
         "Territory_Region__c": "South",
-        "Account_Status__c": "Active",
+        "Account_Status__c": "Prospect",
         "Payments_Stage__c": "Paid",
-        "Website": "https://www.sewelllexus.com",
+        "Website": "https://www.aberdeenchrysler.com",
         "Dawn_Status__c": "",
         "LastModifiedDate": "2026-05-27T11:20:00Z",
         "Phone": "+1-214-555-0108",
@@ -113,26 +115,24 @@ def index():
 def get_accounts():
     name_filter = request.args.get('name', '').strip().lower()
     region_filter = request.args.get('region', '').strip()
-    status_filter = request.args.get('status', '').strip()
     payments_stage_filter = request.args.get('payments_stage', '').strip()
-    
+
     filtered = []
-    
+
     for acc in SALESFORCE_ACCOUNTS:
-        # Default Filter: Exclude accounts without websites
+        # Default filters: website required, only Prospect accounts
         if not acc.get('Website'):
             continue
-            
-        # Apply layered filters
+        if acc.get('Account_Status__c') != 'Prospect':
+            continue
+
+        # Apply user-controlled filters
         if name_filter and name_filter not in acc['Name'].lower():
             continue
-            
+
         if region_filter and acc['Territory_Region__c'] != region_filter:
             continue
-            
-        if status_filter and acc['Account_Status__c'] != status_filter:
-            continue
-            
+
         if payments_stage_filter and acc['Payments_Stage__c'] != payments_stage_filter:
             continue
             
@@ -146,7 +146,6 @@ def get_accounts():
 import urllib.parse
 import urllib.request
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 import bs4
 from email_validator import validate_email, EmailNotValidError
@@ -293,59 +292,92 @@ def start_discovery():
     data = request.get_json()
     if not data or 'accountIds' not in data:
         return jsonify({"error": "Missing accountIds"}), 400
-        
+
     account_ids = data['accountIds']
     valid_accounts = []
     invalid_accounts = []
-    
+
+    urls_to_scrape = []
+    url_to_acc = {}
+
     for acc in SALESFORCE_ACCOUNTS:
-        if acc['Id'] in account_ids:
-            website = acc.get('Website', '')
-            is_valid = False
-            
-            if website:
-                try:
-                    result = urllib.parse.urlparse(website)
-                    if result.scheme in ['http', 'https'] and result.netloc:
-                        is_valid = True
-                except ValueError:
-                    is_valid = False
-                    
-            if is_valid:
-                print(f"Audit Log: Account {acc['Id']} ({acc['Name']}) valid URL. Starting crawl...")
-                discovered = crawl_website(website)
-                
-                if discovered == "BLOCKED":
-                    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    reason = f"Blocked - {timestamp}"
-                    acc['Dawn_Status__c'] = reason
-                    invalid_accounts.append({
-                        "Id": acc['Id'],
-                        "Name": acc['Name'],
-                        "Reason": "Blocked by firewall (403)",
-                        "Dawn_Status__c": reason
-                    })
-                    print(f"Audit Log: Account {acc['Id']} ({acc['Name']}) failed crawl. Reason: {reason}")
-                else:
-                    acc['CrawledPages'] = discovered
-                    valid_accounts.append({
-                        "Id": acc['Id'],
-                        "Name": acc['Name'],
-                        "Website": website,
-                        "CrawledPages": discovered
-                    })
-            else:
-                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                reason = f"No website available - {timestamp}"
+        if acc['Id'] not in account_ids:
+            continue
+        website = acc.get('Website', '')
+        is_valid = False
+        if website:
+            try:
+                parsed = urllib.parse.urlparse(website)
+                if parsed.scheme in ['http', 'https'] and parsed.netloc:
+                    is_valid = True
+            except ValueError:
+                pass
+
+        if is_valid:
+            urls_to_scrape.append(website)
+            url_to_acc[website] = acc
+        else:
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            reason = f"No website available - {timestamp}"
+            acc['Dawn_Status__c'] = reason
+            invalid_accounts.append({
+                "Id": acc['Id'],
+                "Name": acc['Name'],
+                "Reason": "Invalid or missing website structure",
+                "Dawn_Status__c": reason
+            })
+            print(f"Audit Log: Account {acc['Id']} ({acc['Name']}) failed website validation.")
+
+    if urls_to_scrape:
+        print(f"Audit Log: Running scraper on {len(urls_to_scrape)} site(s) with roles: {TARGET_ROLES}")
+        try:
+            scraper_results = asyncio.run(run_scraper(urls=urls_to_scrape, roles=TARGET_ROLES))
+        except Exception as e:
+            print(f"Audit Log: Scraper failed: {e}")
+            scraper_results = [{"website": u, "team_page_found": None, "people": [],
+                                "blocked": False, "error": str(e)} for u in urls_to_scrape]
+
+        for result in scraper_results:
+            acc = url_to_acc.get(result['website'])
+            if not acc:
+                continue
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            if result.get('blocked'):
+                reason = f"Blocked - {timestamp}"
                 acc['Dawn_Status__c'] = reason
                 invalid_accounts.append({
                     "Id": acc['Id'],
                     "Name": acc['Name'],
-                    "Reason": "Invalid or missing website structure",
+                    "Reason": "Blocked by bot protection",
                     "Dawn_Status__c": reason
                 })
-                print(f"Audit Log: Account {acc['Id']} ({acc['Name']}) failed website validation. Reason: {reason}")
-                
+                print(f"Audit Log: Account {acc['Id']} ({acc['Name']}) blocked.")
+            elif result.get('error') and not result.get('team_page_found'):
+                reason = f"Error - {timestamp}"
+                acc['Dawn_Status__c'] = reason
+                invalid_accounts.append({
+                    "Id": acc['Id'],
+                    "Name": acc['Name'],
+                    "Reason": result['error'],
+                    "Dawn_Status__c": reason
+                })
+                print(f"Audit Log: Account {acc['Id']} ({acc['Name']}) error: {result['error']}")
+            else:
+                # Cache the full scraper result so the extraction step can reuse it
+                acc['_scraperResult'] = result
+                team_page = result.get('team_page_found')
+                crawled_pages = [team_page] if team_page else []
+                acc['CrawledPages'] = crawled_pages
+                valid_accounts.append({
+                    "Id": acc['Id'],
+                    "Name": acc['Name'],
+                    "Website": result['website'],
+                    "CrawledPages": crawled_pages
+                })
+                print(f"Audit Log: Account {acc['Id']} ({acc['Name']}) done. "
+                      f"Team page: {team_page}. People: {len(result.get('people', []))}")
+
     return jsonify({
         "valid": valid_accounts,
         "invalid": invalid_accounts
@@ -355,60 +387,50 @@ def start_discovery():
 def start_extraction():
     data = request.get_json()
     urls = data.get('urls', [])
-    
-    all_results = []
-    
-    def fetch_and_extract(url):
-        req = urllib.request.Request(
-            url, 
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        )
-        try:
-            resp = urllib.request.urlopen(req, timeout=10)
-            html = resp.read().decode('utf-8', errors='ignore')
-            return extract_staff_from_html(html, url)
-        except Exception as e:
-            print(f"Extraction failed for {url}: {e}")
-            return []
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = [executor.submit(fetch_and_extract, u) for u in urls]
-        for future in as_completed(futures):
-            res = future.result()
-            if res:
-                all_results.extend(res)
-                
-    # Fallback for Hackathon Demo if the dynamic crawler is blocked by Cloudflare entirely
-    if len(all_results) == 0:
-        for url in urls:
-            if 'hendrickhonda' in url:
+    all_results = []
+
+    # Build a lookup from team-page URL → cached scraper result stored during discovery
+    team_page_cache: dict = {}
+    for acc in SALESFORCE_ACCOUNTS:
+        scraper_result = acc.get('_scraperResult')
+        if scraper_result and scraper_result.get('team_page_found'):
+            team_page_cache[scraper_result['team_page_found']] = scraper_result
+
+    for url in urls:
+        cached = team_page_cache.get(url)
+        if cached:
+            for person in cached.get('people', []):
+                norm_role, conf = normalize_title(person.get('title', ''))
+                dept = "Parts" if "Parts" in norm_role else ("Service" if "Service" in norm_role else "Executive")
                 all_results.append({
-                    "full_name": "Jane Smith",
-                    "title": "Fixed Ops Director",
-                    "normalized_role": "Fixed Operations Director",
-                    "email": "jsmith@hendrickhonda.com",
-                    "phone_number": "(704) 555-1234",
-                    "department": "Service",
+                    "full_name": person.get('name', ''),
+                    "title": person.get('title', ''),
+                    "normalized_role": norm_role,
+                    "email": person.get('email') or '',
+                    "phone_number": person.get('phone') or '',
+                    "department": dept,
                     "source_url": url,
-                    "confidence": 0.94
+                    "confidence": conf,
                 })
-                all_results.append({
-                    "full_name": "Michael Chang",
-                    "title": "GM",
-                    "normalized_role": "General Manager",
-                    "email": "mchang@hendrickhonda.com",
-                    "phone_number": "(704) 555-9988",
-                    "department": "Executive",
-                    "source_url": url,
-                    "confidence": 0.88
-                })
-    
-    # After extraction, add validation flags to each result
+        else:
+            # Fallback: fetch and parse with the basic extractor if no cached result
+            req = urllib.request.Request(
+                url,
+                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            )
+            try:
+                resp = urllib.request.urlopen(req, timeout=10)
+                html = resp.read().decode('utf-8', errors='ignore')
+                all_results.extend(extract_staff_from_html(html, url))
+            except Exception as e:
+                print(f"Extraction fallback failed for {url}: {e}")
+
+    # Add validation flags to each result
     for item in all_results:
-        email = item.get('email', '')
-        phone = item.get('phone_number', '')
-        item['email_valid'] = is_valid_email(email)
-        item['phone_valid'] = is_valid_phone(phone)
+        item['email_valid'] = is_valid_email(item.get('email', ''))
+        item['phone_valid'] = is_valid_phone(item.get('phone_number', ''))
+
     return jsonify({"extracted": all_results})
 
 SALESFORCE_CONTACTS = [

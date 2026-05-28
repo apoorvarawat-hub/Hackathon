@@ -11,7 +11,6 @@ const state = {
   searchQuery: '',
   filters: {
     region: '',
-    status: '',
     paymentsStage: ''
   },
   activeView: 'viewAccountSelect',
@@ -80,7 +79,6 @@ async function fetchAccounts() {
     const queryParams = new URLSearchParams({
       name: state.searchQuery,
       region: state.filters.region,
-      status: state.filters.status,
       payments_stage: state.filters.paymentsStage
     });
     
@@ -105,15 +103,13 @@ async function fetchAccounts() {
 
 function populateFilterOptions(data) {
   const regions = new Set();
-  const statuses = new Set();
   const stages = new Set();
   
   data.forEach(acc => {
     if (acc.Territory_Region__c) regions.add(acc.Territory_Region__c);
-    if (acc.Account_Status__c) statuses.add(acc.Account_Status__c);
     if (acc.Payments_Stage__c) stages.add(acc.Payments_Stage__c);
   });
-  
+
   const populateSelect = (id, optionsSet) => {
     const select = document.getElementById(id);
     const currentVal = select.value;
@@ -123,9 +119,8 @@ function populateFilterOptions(data) {
     });
     select.value = currentVal;
   };
-  
+
   populateSelect('regionFilter', regions);
-  populateSelect('statusFilter', statuses);
   populateSelect('paymentsStageFilter', stages);
 }
 
@@ -223,11 +218,16 @@ function renderErrorTableState() {
 // ------------------------------------------
 // Interactive Selection Handlers
 // ------------------------------------------
+const MAX_ACCOUNT_SELECTION = 10;
+
 function handleAccountSelection(account) {
-  // If row clicked, we can toggle its selection
   if (state.selectedAccountIds.has(account.Id)) {
     state.selectedAccountIds.delete(account.Id);
   } else {
+    if (state.selectedAccountIds.size >= MAX_ACCOUNT_SELECTION) {
+      alert(`You can select a maximum of ${MAX_ACCOUNT_SELECTION} accounts at a time.`);
+      return;
+    }
     state.selectedAccountIds.add(account.Id);
   }
   
@@ -484,11 +484,6 @@ function setupEventListeners() {
     fetchAccounts();
   });
   
-  document.getElementById('statusFilter').addEventListener('change', (e) => {
-    state.filters.status = e.target.value;
-    fetchAccounts();
-  });
-  
   document.getElementById('paymentsStageFilter').addEventListener('change', (e) => {
     state.filters.paymentsStage = e.target.value;
     fetchAccounts();
@@ -497,11 +492,24 @@ function setupEventListeners() {
   document.getElementById('selectAllCheckbox').addEventListener('change', (e) => {
     const isChecked = e.target.checked;
     const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+    if (isChecked && rowCheckboxes.length > MAX_ACCOUNT_SELECTION) {
+      alert(`You can select a maximum of ${MAX_ACCOUNT_SELECTION} accounts at a time. Selecting the first ${MAX_ACCOUNT_SELECTION}.`);
+    }
+    let count = 0;
     rowCheckboxes.forEach(cb => {
-      cb.checked = isChecked;
       const id = cb.getAttribute('data-id');
-      if (isChecked) state.selectedAccountIds.add(id);
-      else state.selectedAccountIds.delete(id);
+      if (isChecked) {
+        if (count < MAX_ACCOUNT_SELECTION) {
+          cb.checked = true;
+          state.selectedAccountIds.add(id);
+          count++;
+        } else {
+          cb.checked = false;
+        }
+      } else {
+        cb.checked = false;
+        state.selectedAccountIds.delete(id);
+      }
     });
     renderAccountDetails();
   });

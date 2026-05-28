@@ -1,0 +1,12 @@
+# Web framework
+flask
+
+# Scraper (playwright-based)
+playwright
+playwright-stealth
+beautifulsoup4
+lxml
+
+# Validation
+email-validator
+phonenumbers
