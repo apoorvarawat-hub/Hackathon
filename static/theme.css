@@ -673,3 +673,44 @@ body, html {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted, #B8B8B8);
 }
+
+/* ------------------------------------------
+   Checkbox & Multi-Select Styling
+   ------------------------------------------ */
+input[type="checkbox"] {
+  accent-color: var(--brand, #0377B3);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+#shell.dark input[type="checkbox"] {
+  accent-color: var(--brand, #3B9DD4);
+}
+
+.multi-select-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.multi-select-message i {
+  font-size: 48px;
+  color: var(--brand, #0377B3);
+}
+
+.multi-select-message .title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary, #1A1A2E);
+}
+
+.multi-select-message .subtitle {
+  font-size: 13px;
+  color: var(--text-secondary, #535862);
+}

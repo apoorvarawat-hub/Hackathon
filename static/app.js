@@ -5,9 +5,15 @@
 // Global Application State
 const state = {
   accounts: [],
+  selectedAccountIds: new Set(),
   selectedAccount: null,
   theme: 'light',
-  searchQuery: ''
+  searchQuery: '',
+  filters: {
+    region: '',
+    status: '',
+    paymentsStage: ''
+  }
 };
 
 // ------------------------------------------
@@ -64,19 +70,58 @@ function updateThemeUIElements() {
 // ------------------------------------------
 // REST API Communication (Fetch Accounts)
 // ------------------------------------------
-async function fetchAccounts(query = '') {
+async function fetchAccounts() {
   try {
-    const response = await fetch(`/api/accounts?query=${encodeURIComponent(query)}`);
+    const queryParams = new URLSearchParams({
+      name: state.searchQuery,
+      region: state.filters.region,
+      status: state.filters.status,
+      payments_stage: state.filters.paymentsStage
+    });
+    
+    const response = await fetch(`/api/accounts?${queryParams}`);
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
     
-    state.accounts = await response.json();
+    const data = await response.json();
+    
+    // We only populate options once based on the initial fetch
+    if (state.accounts.length === 0) {
+       populateFilterOptions(data);
+    }
+    state.accounts = data;
     renderAccountsTable();
   } catch (error) {
     console.error('Failed to fetch accounts:', error);
     renderErrorTableState();
   }
+}
+
+function populateFilterOptions(data) {
+  const regions = new Set();
+  const statuses = new Set();
+  const stages = new Set();
+  
+  data.forEach(acc => {
+    if (acc.Territory_Region__c) regions.add(acc.Territory_Region__c);
+    if (acc.Account_Status__c) statuses.add(acc.Account_Status__c);
+    if (acc.Payments_Stage__c) stages.add(acc.Payments_Stage__c);
+  });
+  
+  const populateSelect = (id, optionsSet) => {
+    const select = document.getElementById(id);
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">All</option>';
+    Array.from(optionsSet).sort().forEach(opt => {
+      select.innerHTML += `<option value="${escapeHtml(opt)}">${escapeHtml(opt)}</option>`;
+    });
+    select.value = currentVal;
+  };
+  
+  populateSelect('regionFilter', regions);
+  populateSelect('statusFilter', statuses);
+  populateSelect('paymentsStageFilter', stages);
 }
 
 // ------------------------------------------
@@ -103,35 +148,66 @@ function renderAccountsTable() {
   emptyState.style.display = 'none';
   table.style.display = 'table';
   
+  const formatDate = (isoString) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+  
   state.accounts.forEach(acc => {
     const tr = document.createElement('tr');
-    tr.setAttribute('data-id', acc.id);
+    tr.setAttribute('data-id', acc.Id);
     
     // Highlight if currently selected
-    if (state.selectedAccount && state.selectedAccount.id === acc.id) {
+    if (state.selectedAccountIds.has(acc.Id)) {
       tr.className = 'selected';
     }
     
-    // Render columns: Name, Code, Region, Status Badge
+    const isChecked = state.selectedAccountIds.has(acc.Id) ? 'checked' : '';
+    
+    // Render columns: Checkbox, Name, Region, Status, Payment Stage, Website, Last Modified
     tr.innerHTML = `
-      <td title="${escapeHtml(acc.name)}" style="font-weight: 700;">${escapeHtml(acc.name)}</td>
-      <td title="${escapeHtml(acc.code)}">${escapeHtml(acc.code)}</td>
-      <td title="${escapeHtml(acc.region)}">${escapeHtml(acc.region)}</td>
-      <td>
-        <span class="myk-badge success">${escapeHtml(acc.status)}</span>
+      <td onclick="event.stopPropagation()">
+        <input type="checkbox" class="row-checkbox" data-id="${escapeHtml(acc.Id)}" ${isChecked}>
       </td>
+      <td title="${escapeHtml(acc.Name)}" style="font-weight: 700;">${escapeHtml(acc.Name)}</td>
+      <td title="${escapeHtml(acc.Territory_Region__c)}">${escapeHtml(acc.Territory_Region__c)}</td>
+      <td>
+        <span class="myk-badge ${acc.Account_Status__c === 'Active' ? 'success' : 'neutral'}">${escapeHtml(acc.Account_Status__c)}</span>
+      </td>
+      <td>${escapeHtml(acc.Payments_Stage__c)}</td>
+      <td><a href="${escapeHtml(acc.Website)}" target="_blank" onclick="event.stopPropagation()">${escapeHtml(acc.Website)}</a></td>
+      <td>${formatDate(acc.LastModifiedDate)}</td>
     `;
     
     tr.addEventListener('click', () => handleAccountSelection(acc));
     tableBody.appendChild(tr);
   });
+  
+  updateSelectAllCheckbox();
+}
+
+function updateSelectAllCheckbox() {
+  const selectAll = document.getElementById('selectAllCheckbox');
+  const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+  if (rowCheckboxes.length === 0) {
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
+    return;
+  }
+  
+  const allChecked = Array.from(rowCheckboxes).every(cb => cb.checked);
+  const someChecked = Array.from(rowCheckboxes).some(cb => cb.checked);
+  
+  selectAll.checked = allChecked;
+  selectAll.indeterminate = !allChecked && someChecked;
 }
 
 function renderErrorTableState() {
   const tableBody = document.getElementById('accountsTableBody');
   tableBody.innerHTML = `
     <tr>
-      <td colspan="4" style="text-align: center; color: var(--error-red, #B42318); padding: 24px;">
+      <td colspan="7" style="text-align: center; color: var(--error-red, #B42318); padding: 24px;">
         <i class="material-icons" style="vertical-align: middle; margin-right: 8px;">error_outline</i>
         Error loading accounts. Please refresh the page.
       </td>
@@ -143,17 +219,28 @@ function renderErrorTableState() {
 // Interactive Selection Handlers
 // ------------------------------------------
 function handleAccountSelection(account) {
-  state.selectedAccount = account;
+  // If row clicked, we can toggle its selection
+  if (state.selectedAccountIds.has(account.Id)) {
+    state.selectedAccountIds.delete(account.Id);
+  } else {
+    state.selectedAccountIds.add(account.Id);
+  }
   
-  // Highlight active row in the table
+  // Highlight active rows in the table and update checkboxes
   const rows = document.querySelectorAll('#accountsTableBody tr');
   rows.forEach(row => {
-    if (row.getAttribute('data-id') === account.id) {
+    const id = row.getAttribute('data-id');
+    const cb = row.querySelector('.row-checkbox');
+    if (state.selectedAccountIds.has(id)) {
       row.className = 'selected';
+      if (cb) cb.checked = true;
     } else {
       row.className = '';
+      if (cb) cb.checked = false;
     }
   });
+  
+  updateSelectAllCheckbox();
   
   // Show and populate Details Panel
   renderAccountDetails();
@@ -162,26 +249,57 @@ function handleAccountSelection(account) {
 function renderAccountDetails() {
   const emptyState = document.getElementById('detailsEmptyState');
   const dataPanel = document.getElementById('detailsDataPanel');
-  const acc = state.selectedAccount;
   
-  if (!acc) {
+  let multiSelectPanel = document.getElementById('detailsMultiSelectPanel');
+  if (!multiSelectPanel) {
+    multiSelectPanel = document.createElement('div');
+    multiSelectPanel.id = 'detailsMultiSelectPanel';
+    multiSelectPanel.className = 'multi-select-message';
+    dataPanel.parentNode.appendChild(multiSelectPanel);
+  }
+  
+  const selectedCount = state.selectedAccountIds.size;
+  
+  if (selectedCount === 0) {
     emptyState.style.display = 'flex';
     dataPanel.style.display = 'none';
+    multiSelectPanel.style.display = 'none';
     disableActionButtons();
     return;
   }
   
+  if (selectedCount > 1) {
+    emptyState.style.display = 'none';
+    dataPanel.style.display = 'none';
+    multiSelectPanel.style.display = 'flex';
+    multiSelectPanel.innerHTML = `
+      <i class="material-icons">library_add_check</i>
+      <div class="title">${selectedCount} Accounts Selected</div>
+      <div class="subtitle">Click "Start Discovery" to process the selected batch of accounts.</div>
+    `;
+    enableActionButtons();
+    return;
+  }
+  
+  // Exactly 1 selected
   emptyState.style.display = 'none';
+  multiSelectPanel.style.display = 'none';
   dataPanel.style.display = 'flex';
   
+  const selectedId = Array.from(state.selectedAccountIds)[0];
+  const acc = state.accounts.find(a => a.Id === selectedId);
+  
+  if (!acc) return;
+  
   // Populate Fields
-  document.getElementById('accFieldId').textContent = acc.id;
-  document.getElementById('accFieldName').textContent = acc.name;
-  document.getElementById('accFieldCode').textContent = acc.code;
-  document.getElementById('accFieldRegion').textContent = acc.region;
-  document.getElementById('accFieldPhone').textContent = acc.phone;
-  document.getElementById('accFieldIndustry').textContent = acc.industry;
-  document.getElementById('accFieldOwner').textContent = acc.owner;
+  document.getElementById('accFieldId').textContent = acc.Id;
+  document.getElementById('accFieldName').textContent = acc.Name;
+  document.getElementById('accFieldRegion').textContent = acc.Territory_Region__c;
+  document.getElementById('accFieldStatus').textContent = acc.Account_Status__c;
+  document.getElementById('accFieldPaymentsStage').textContent = acc.Payments_Stage__c;
+  document.getElementById('accFieldPhone').textContent = acc.Phone;
+  document.getElementById('accFieldIndustry').textContent = acc.Industry;
+  document.getElementById('accFieldOwner').textContent = acc.Owner;
   
   // Currency Formatting (Annual Revenue)
   const currencyFormatter = new Intl.NumberFormat('en-US', {
@@ -189,14 +307,14 @@ function renderAccountDetails() {
     currency: 'USD',
     maximumFractionDigits: 0
   });
-  document.getElementById('accFieldRevenue').textContent = currencyFormatter.format(acc.annual_revenue);
+  document.getElementById('accFieldRevenue').textContent = currencyFormatter.format(acc.AnnualRevenue);
   
   // Dealership Website Link and URL Box
   const websiteLink = document.getElementById('accountWebsiteLink');
   const websiteText = document.getElementById('accountWebsiteText');
   
-  websiteLink.href = acc.website;
-  websiteText.textContent = acc.website;
+  websiteLink.href = acc.Website;
+  websiteText.textContent = acc.Website;
   
   // Enable Action Buttons
   enableActionButtons();
@@ -255,22 +373,58 @@ function setupEventListeners() {
   const searchInput = document.getElementById('accountSearchInput');
   searchInput.addEventListener('input', debounce((e) => {
     state.searchQuery = e.target.value;
-    fetchAccounts(state.searchQuery);
+    fetchAccounts();
   }, 200));
+  
+  document.getElementById('regionFilter').addEventListener('change', (e) => {
+    state.filters.region = e.target.value;
+    fetchAccounts();
+  });
+  
+  document.getElementById('statusFilter').addEventListener('change', (e) => {
+    state.filters.status = e.target.value;
+    fetchAccounts();
+  });
+  
+  document.getElementById('paymentsStageFilter').addEventListener('change', (e) => {
+    state.filters.paymentsStage = e.target.value;
+    fetchAccounts();
+  });
+  
+  document.getElementById('selectAllCheckbox').addEventListener('change', (e) => {
+    const isChecked = e.target.checked;
+    const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+    rowCheckboxes.forEach(cb => {
+      cb.checked = isChecked;
+      const id = cb.getAttribute('data-id');
+      if (isChecked) state.selectedAccountIds.add(id);
+      else state.selectedAccountIds.delete(id);
+    });
+  });
+  
+  document.getElementById('accountsTableBody').addEventListener('change', (e) => {
+    if (e.target.classList.contains('row-checkbox')) {
+      const id = e.target.getAttribute('data-id');
+      if (e.target.checked) state.selectedAccountIds.add(id);
+      else state.selectedAccountIds.delete(id);
+      updateSelectAllCheckbox();
+    }
+  });
   
   // Copy Account ID Button
   const copyBtn = document.getElementById('btnCopyId');
   copyBtn.addEventListener('click', (e) => {
-    if (state.selectedAccount) {
-      copyToClipboard(state.selectedAccount.id, e.target);
+    if (state.selectedAccountIds.size === 1) {
+      const selectedId = Array.from(state.selectedAccountIds)[0];
+      copyToClipboard(selectedId, e.target);
     }
   });
 
   // Start Discovery Button Action
   const btnStart = document.getElementById('btnStartDiscovery');
   btnStart.addEventListener('click', () => {
-    if (state.selectedAccount) {
-      alert(`Milestone 1 Complete! Selected Dealership: ${state.selectedAccount.name}\nWebsite Loaded: ${state.selectedAccount.website}\n\nReady for Crawling & Enrichment (Milestone 2)!`);
+    if (state.selectedAccountIds.size > 0) {
+      alert(`Milestone 1 Complete! Selected ${state.selectedAccountIds.size} Dealership(s)\n\nReady for Crawling & Enrichment (Milestone 2)!`);
     }
   });
 }

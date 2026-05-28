@@ -101,12 +101,32 @@
           </div>
           
           <div class="myk-card-body">
-            <!-- Search Form Group -->
-            <div class="form-group">
-              <label for="accountSearchInput" class="form-label">Search Salesforce Accounts</label>
-              <div class="input-container">
-                <i class="material-icons">search</i>
-                <input type="text" id="accountSearchInput" class="myk-input" placeholder="Search by name, dealer code, or region..." autocomplete="off">
+            <!-- Search & Filters -->
+            <div style="display: flex; gap: 16px; margin-bottom: 16px;">
+              <div class="form-group" style="flex: 2; margin-bottom: 0;">
+                <label for="accountSearchInput" class="form-label">Account Name</label>
+                <div class="input-container">
+                  <i class="material-icons">search</i>
+                  <input type="text" id="accountSearchInput" class="myk-input" placeholder="Search by name..." autocomplete="off">
+                </div>
+              </div>
+              <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                <label for="regionFilter" class="form-label">Region</label>
+                <select id="regionFilter" class="myk-input">
+                  <option value="">All Regions</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                <label for="statusFilter" class="form-label">Account Status</label>
+                <select id="statusFilter" class="myk-input">
+                  <option value="">All Statuses</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                <label for="paymentsStageFilter" class="form-label">Payment Status</label>
+                <select id="paymentsStageFilter" class="myk-input">
+                  <option value="">All Stages</option>
+                </select>
               </div>
             </div>
             
@@ -115,10 +135,13 @@
               <table class="myk-table" id="accountsTable">
                 <thead>
                   <tr>
-                    <th style="width: 45%;">Account Name</th>
-                    <th style="width: 25%;">Dealer Code</th>
-                    <th style="width: 15%;">Region</th>
-                    <th style="width: 15%;">Status</th>
+                    <th style="width: 5%;"><input type="checkbox" id="selectAllCheckbox"></th>
+                    <th style="width: 25%;">Account Name</th>
+                    <th style="width: 15%;">Territory Region</th>
+                    <th style="width: 15%;">Account Status</th>
+                    <th style="width: 15%;">Payment Status</th>
+                    <th style="width: 15%;">Website</th>
+                    <th style="width: 10%;">Last Modified</th>
                   </tr>
                 </thead>
                 <tbody id="accountsTableBody">
@@ -154,11 +177,13 @@
             <div class="details-panel" id="detailsDataPanel" style="display: none;">
               <!-- Website Highlight Box -->
               <div class="website-container" id="websiteHighlightBox">
-                <div class="website-title">Dealership Website Context</div>
-                <a href="#" target="_blank" class="website-link" id="accountWebsiteLink" rel="noopener">
-                  <span id="accountWebsiteText">https://example.com</span>
-                  <i class="material-icons">open_in_new</i>
-                </a>
+                <div class="website-title" id="websiteHighlightTitle">Dealership Website Context</div>
+                <div id="websiteLinksContainer">
+                  <a href="#" target="_blank" class="website-link" id="accountWebsiteLink" rel="noopener">
+                    <span id="accountWebsiteText">https://example.com</span>
+                    <i class="material-icons">open_in_new</i>
+                  </a>
+                </div>
               </div>
               
               <!-- Account Metadata Fields -->
@@ -176,13 +201,18 @@
               </div>
               
               <div class="detail-row">
-                <div class="detail-label">Dealer Code</div>
-                <div class="detail-value" id="accFieldCode">CODE-00</div>
+                <div class="detail-label">Territory Region</div>
+                <div class="detail-value" id="accFieldRegion">Northwest</div>
               </div>
               
               <div class="detail-row">
-                <div class="detail-label">Region</div>
-                <div class="detail-value" id="accFieldRegion">Northwest</div>
+                <div class="detail-label">Account Status</div>
+                <div class="detail-value" id="accFieldStatus">Active</div>
+              </div>
+              
+              <div class="detail-row">
+                <div class="detail-label">Payment Status</div>
+                <div class="detail-value" id="accFieldPaymentsStage">Paid</div>
               </div>
               
               <div class="detail-row">
