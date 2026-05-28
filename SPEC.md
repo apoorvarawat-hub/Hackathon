@@ -192,6 +192,92 @@ Allow users to search and select Salesforce Accounts before enrichment begins.
 - Website auto-populates successfully
 
 ---
+# Feedback after working on Milestone 1
+After completing the first milestone, the Account Selection experience must support richer filtering, clearer table columns, and multi-account selection.
+
+### Salesforce Account Fields / API Names
+Use the following Account object fields:
+
+| UI Label | Salesforce Account API Name | Purpose |
+|---|---|---|
+| Account Name | `Name` | Search/filter by dealership account name |
+| Territory Region | `Territory_Region__c` | Filter accounts by territory/region |
+| Account Status | `Account_Status__c` | Filter accounts by account lifecycle/status |
+| Payment Status | `Payments_Stage__c` | Filter accounts by payment status/stage |
+| Website | `Website` | Display website and automatically filter to accounts with websites |
+| Last Modified Date | `LastModifiedDate` | Show when the Account record was last modified |
+
+> Dealer Code should not be shown in the Account Selection table.
+
+### Functional Requirements
+- Provide filters for:
+  - Account Name using an operator-style text filter
+  - Territory Region using `Territory_Region__c`
+  - Account Status using `Account_Status__c`
+  - Payment Status using `Payments_Stage__c`
+- Automatically apply a default filter so only Accounts with a non-empty `Website` field are shown.
+- Display selected account details.
+- Auto-fetch the associated website from `Website`.
+- Support selecting multiple Accounts from the result table.
+- Add a checkbox next to each Account row.
+- Add a "Select All" control for selecting all currently filtered Accounts.
+
+### Account Results Table Columns
+The Account Selection table must display:
+
+| Column | Field / Source |
+|---|---|
+| Select | Row checkbox |
+| Account Name | `Name` |
+| Territory Region | `Territory_Region__c` |
+| Account Status | `Account_Status__c` |
+| Payment Status | `Payments_Stage__c` |
+| Website | `Website` |
+| Last Modified | `LastModifiedDate` |
+
+The table must not display Dealer Code.
+
+### Default Query Behavior
+The initial Account query must include a website-only filter:
+
+```sql
+WHERE Website != null
+```
+
+Additional filters should be layered on top of this default condition.
+
+### Example SOQL Shape
+```sql
+SELECT
+  Id,
+  Name,
+  Territory_Region__c,
+  Account_Status__c,
+  Payments_Stage__c,
+  Website,
+  LastModifiedDate
+FROM Account
+WHERE Website != null
+ORDER BY LastModifiedDate DESC
+LIMIT 200
+```
+
+### Inputs
+- Salesforce Account data
+
+### Outputs
+- Selected Account record(s)
+- Website URL(s)
+- Filtered Account result set
+
+### Success Criteria
+- User can filter Accounts by name, territory region, account status, payment status, and website availability.
+- Accounts without websites are excluded by default.
+- Account table shows last modified date and website.
+- Dealer Code is not shown.
+- User can select one Account, multiple Accounts, or all currently filtered Accounts.
+- Website values are available for downstream discovery.
+---
 
 ## Milestone 2 — Agent Retrieves Website
 
@@ -679,3 +765,6 @@ The solution balances:
 By introducing a human-in-the-loop review workflow, the platform avoids the risks associated with direct autonomous CRM mutation while significantly reducing manual dealership research effort.
 
 This creates a practical foundation for AI-assisted Salesforce enrichment at scale.
+
+
+
