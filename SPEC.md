@@ -281,20 +281,153 @@ LIMIT 200
 
 ## Milestone 2 — Agent Retrieves Website
 
+## Milestone 2 — Agent Retrieves Website
+
 ### Objective
-Retrieve dealership website associated with the selected Salesforce Account.
+
+Retrieve dealership website information associated with the selected Salesforce Account(s) and prepare valid websites for crawling.
 
 ### Functional Requirements
-- Pull website from Salesforce Account
-- Validate URL structure
-- Handle missing URLs gracefully
+
+- User selects one or more Accounts and clicks the **Next** button to start the discovery workflow.
+- The system retrieves the website value from the Salesforce Account field `Website`.
+- The retrieved website URL is used as the input for the crawling process.
+- Validate URL structure before sending the website for crawling.
+- Handle missing or invalid website URLs gracefully.
+- If no valid website is available, update the Salesforce Account field `Dawn_Status__c` with:
+  ```text
+  No website available - YYYY-MM-DD HH:mm:ss
+  ```
+* The timestamp should use the system-generated current date and time.
+
+### Validation Rules
+
+- Website must contain a valid URL structure.
+- Website must include a supported protocol (`http://` or `https://`).
+- Empty, malformed, or unsupported URLs should be excluded from crawling.
 
 ### Outputs
-- Website URL ready for crawling
+
+- Validated website URL(s) ready for crawling
+- Updated `Dawn_Status__c` value for Accounts missing websites
 
 ### Failure Handling
-- Invalid URL warning
+
+- Invalid URL warning displayed in UI
 - Missing website fallback state
+- Accounts without valid websites are skipped from crawling
+- Failure reason logged for audit and troubleshooting
+
+
+---
+# Feedback 2: After Milestone 2 Feedback 1 updates
+
+## Observation
+During Milestone 2 validation, the **Next** button currently does not trigger the expected discovery workflow behavior.
+
+## Issue Identified
+Clicking the **Next** button does not:
+- Start the discovery workflow
+- Process selected Account records
+- Trigger website retrieval logic
+- Provide any visible confirmation that the workflow has started
+
+## Required Enhancements
+
+### Next Button Workflow Trigger
+The **Next** button must:
+- Read all selected Salesforce Account records
+- Validate that at least one Account has been selected
+- Pass selected Account records into the website retrieval workflow
+- Trigger the next stage of the discovery pipeline
+
+If no Accounts are selected:
+- Display a validation warning to the user
+- Prevent progression to the next step
+
+## Console Logging Requirement
+For debugging and milestone verification purposes, the system should log the selected Account records to the browser console when the **Next** button is clicked.
+
+Example:
+
+```javascript
+console.log("Selected Accounts:", selectedAccounts);
+```
+
+## Expected Debug Output
+The console output should include:
+- Account Id
+- Account Name
+- Website
+- Account Status
+- Territory Region
+
+## Success Criteria
+- Clicking **Next** successfully starts the workflow
+- Selected Accounts are correctly passed to downstream processing
+- Console logs confirm selected records are captured properly
+- Validation prevents progression when no Accounts are selected
+- Workflow behavior is visible and verifiable during testing
+
+---
+# Feedback After Milestone 2 — Account Selection and Start Discovery UX Fixes
+
+## Observation
+During Milestone 2 validation, selecting Account records does not fully update the discovery workflow UI as expected.
+
+## Issues Identified
+- Selecting one or more Account records does not enable the **Next** button.
+- The **Next** button label is not specific enough for the discovery workflow.
+- Selecting Account records does not update the Account Details panel on the right side of the screen.
+
+## Required Enhancements
+
+### Enable Discovery Button on Account Selection
+When the user selects one or more Account records:
+- The discovery action button must become enabled.
+- The selected Account records must be stored in the UI state.
+- The selected Account count should be available for validation and downstream processing.
+
+If no Accounts are selected:
+- The discovery action button must remain disabled.
+- The user should not be able to start the discovery workflow.
+
+### Rename Button
+Rename the **Next** button to:
+
+```text
+Start Discovery
+```
+
+This label more clearly communicates that clicking the button begins the contact discovery workflow.
+
+### Update Account Details Panel
+When the user selects an Account record, the Account Details panel on the right side of the screen must update to show the selected Account details.
+
+The Account Details panel should display:
+- Account Name
+- Website
+- Territory Region
+- Account Status
+- Payment Status
+- Last Modified Date
+
+If multiple Accounts are selected:
+- Display the primary/most recently selected Account details.
+- Optionally show the total number of selected Accounts.
+
+## Expected Behavior
+- Selecting at least one Account enables the **Start Discovery** button.
+- Deselecting all Accounts disables the **Start Discovery** button.
+- The right-side Account Details panel updates immediately when an Account is selected.
+- The selected Account data is available for the discovery workflow.
+
+## Success Criteria
+- Account selection correctly controls the enabled/disabled state of the discovery button.
+- The button label reads **Start Discovery**.
+- The Account Details panel reflects the selected Account record.
+- Multi-account selection still works as expected.
+- UI state remains consistent between the table, action button, and details panel.
 
 ---
 

@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initThemeState();
   fetchAccounts();
   setupEventListeners();
+  setupModalListeners();
 });
 
 // ------------------------------------------
@@ -226,16 +227,14 @@ function handleAccountSelection(account) {
     state.selectedAccountIds.add(account.Id);
   }
   
-  // Highlight active rows in the table and update checkboxes
+  // Update checkboxes
   const rows = document.querySelectorAll('#accountsTableBody tr');
   rows.forEach(row => {
     const id = row.getAttribute('data-id');
     const cb = row.querySelector('.row-checkbox');
     if (state.selectedAccountIds.has(id)) {
-      row.className = 'selected';
       if (cb) cb.checked = true;
     } else {
-      row.className = '';
       if (cb) cb.checked = false;
     }
   });
@@ -250,71 +249,82 @@ function renderAccountDetails() {
   const emptyState = document.getElementById('detailsEmptyState');
   const dataPanel = document.getElementById('detailsDataPanel');
   
-  let multiSelectPanel = document.getElementById('detailsMultiSelectPanel');
-  if (!multiSelectPanel) {
-    multiSelectPanel = document.createElement('div');
-    multiSelectPanel.id = 'detailsMultiSelectPanel';
-    multiSelectPanel.className = 'multi-select-message';
-    dataPanel.parentNode.appendChild(multiSelectPanel);
-  }
-  
   const selectedCount = state.selectedAccountIds.size;
   
   if (selectedCount === 0) {
     emptyState.style.display = 'flex';
     dataPanel.style.display = 'none';
-    multiSelectPanel.style.display = 'none';
     disableActionButtons();
+    
+    // Clear rows selections visually
+    const rows = document.querySelectorAll('#accountsTableBody tr');
+    rows.forEach(row => row.className = '');
     return;
   }
   
-  if (selectedCount > 1) {
-    emptyState.style.display = 'none';
-    dataPanel.style.display = 'none';
-    multiSelectPanel.style.display = 'flex';
-    multiSelectPanel.innerHTML = `
-      <i class="material-icons">library_add_check</i>
-      <div class="title">${selectedCount} Accounts Selected</div>
-      <div class="subtitle">Click "Start Discovery" to process the selected batch of accounts.</div>
-    `;
-    enableActionButtons();
-    return;
-  }
-  
-  // Exactly 1 selected
   emptyState.style.display = 'none';
-  multiSelectPanel.style.display = 'none';
   dataPanel.style.display = 'flex';
   
-  const selectedId = Array.from(state.selectedAccountIds)[0];
+  // Display the most recently selected account details
+  const selectedIds = Array.from(state.selectedAccountIds);
+  const selectedId = selectedIds[selectedIds.length - 1];
   const acc = state.accounts.find(a => a.Id === selectedId);
   
   if (!acc) return;
   
+  // Highlight rows in the table that are selected
+  const rows = document.querySelectorAll('#accountsTableBody tr');
+  rows.forEach(row => {
+    if (state.selectedAccountIds.has(row.getAttribute('data-id'))) {
+      row.className = 'selected';
+    } else {
+      row.className = '';
+    }
+  });
+
+  // Instead of multiSelectPanel entirely replacing details, we just update a banner above the details
+  let multiSelectHeader = document.getElementById('detailsMultiSelectHeader');
+  if (!multiSelectHeader) {
+    multiSelectHeader = document.createElement('div');
+    multiSelectHeader.id = 'detailsMultiSelectHeader';
+    multiSelectHeader.style.padding = '12px 16px';
+    multiSelectHeader.style.marginBottom = '16px';
+    multiSelectHeader.style.background = 'var(--nav-active-bg, #D3E4F1)';
+    multiSelectHeader.style.color = 'var(--nav-active-text, #0377B3)';
+    multiSelectHeader.style.borderRadius = '6px';
+    multiSelectHeader.style.fontWeight = '700';
+    multiSelectHeader.style.fontSize = '12px';
+    dataPanel.insertBefore(multiSelectHeader, dataPanel.firstChild);
+  }
+  
+  if (selectedCount > 1) {
+    multiSelectHeader.style.display = 'block';
+    multiSelectHeader.textContent = `${selectedCount} Accounts Selected (Showing primary selection)`;
+  } else {
+    multiSelectHeader.style.display = 'none';
+  }
+  
+  const formatDate = (isoString) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+  
   // Populate Fields
-  document.getElementById('accFieldId').textContent = acc.Id;
   document.getElementById('accFieldName').textContent = acc.Name;
   document.getElementById('accFieldRegion').textContent = acc.Territory_Region__c;
   document.getElementById('accFieldStatus').textContent = acc.Account_Status__c;
   document.getElementById('accFieldPaymentsStage').textContent = acc.Payments_Stage__c;
-  document.getElementById('accFieldPhone').textContent = acc.Phone;
-  document.getElementById('accFieldIndustry').textContent = acc.Industry;
-  document.getElementById('accFieldOwner').textContent = acc.Owner;
   
-  // Currency Formatting (Annual Revenue)
-  const currencyFormatter = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0
-  });
-  document.getElementById('accFieldRevenue').textContent = currencyFormatter.format(acc.AnnualRevenue);
+  const lastModEl = document.getElementById('accFieldLastModified');
+  if (lastModEl) lastModEl.textContent = formatDate(acc.LastModifiedDate);
   
   // Dealership Website Link and URL Box
   const websiteLink = document.getElementById('accountWebsiteLink');
   const websiteText = document.getElementById('accountWebsiteText');
   
-  websiteLink.href = acc.Website;
-  websiteText.textContent = acc.Website;
+  websiteLink.href = acc.Website || '#';
+  websiteText.textContent = acc.Website || 'No Website';
   
   // Enable Action Buttons
   enableActionButtons();
@@ -400,6 +410,7 @@ function setupEventListeners() {
       if (isChecked) state.selectedAccountIds.add(id);
       else state.selectedAccountIds.delete(id);
     });
+    renderAccountDetails();
   });
   
   document.getElementById('accountsTableBody').addEventListener('change', (e) => {
@@ -408,6 +419,7 @@ function setupEventListeners() {
       if (e.target.checked) state.selectedAccountIds.add(id);
       else state.selectedAccountIds.delete(id);
       updateSelectAllCheckbox();
+      renderAccountDetails();
     }
   });
   
@@ -422,11 +434,94 @@ function setupEventListeners() {
 
   // Start Discovery Button Action
   const btnStart = document.getElementById('btnStartDiscovery');
-  btnStart.addEventListener('click', () => {
-    if (state.selectedAccountIds.size > 0) {
-      alert(`Milestone 1 Complete! Selected ${state.selectedAccountIds.size} Dealership(s)\n\nReady for Crawling & Enrichment (Milestone 2)!`);
+  btnStart.addEventListener('click', async () => {
+    if (state.selectedAccountIds.size === 0) {
+      alert("Please select at least one account to proceed.");
+      return;
     }
+    
+    // Console Logging Requirement
+    const selectedAccounts = Array.from(state.selectedAccountIds).map(id => {
+      const acc = state.accounts.find(a => a.Id === id);
+      return {
+        "Account Id": acc.Id,
+        "Account Name": acc.Name,
+        "Website": acc.Website,
+        "Account Status": acc.Account_Status__c,
+        "Territory Region": acc.Territory_Region__c
+      };
+    });
+    console.log("Selected Accounts:", selectedAccounts);
+
+    const originalText = btnStart.innerText;
+    btnStart.innerText = "Loading...";
+    btnStart.classList.add('disabled');
+    btnStart.setAttribute('disabled', 'true');
+    
+    try {
+        const response = await fetch('/api/discovery/start', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ accountIds: Array.from(state.selectedAccountIds) })
+        });
+        
+        const result = await response.json();
+        showValidationModal(result);
+      } catch (error) {
+        console.error('Failed to start discovery:', error);
+        alert('An error occurred while validating accounts.');
+      } finally {
+        btnStart.innerText = originalText;
+        btnStart.classList.remove('disabled');
+        btnStart.removeAttribute('disabled');
+      }
   });
+}
+
+// ------------------------------------------
+// Modal Handlers
+// ------------------------------------------
+function setupModalListeners() {
+  const modal = document.getElementById('validationModal');
+  const btnClose = document.getElementById('btnCloseModal');
+  const btnAck = document.getElementById('btnAcknowledgeModal');
+  
+  const closeModal = () => {
+    modal.style.display = 'none';
+  };
+  
+  btnClose.addEventListener('click', closeModal);
+  btnAck.addEventListener('click', closeModal);
+}
+
+function showValidationModal(result) {
+  const modal = document.getElementById('validationModal');
+  const modalBody = document.getElementById('validationModalBody');
+  
+  let html = '';
+  
+  if (result.valid && result.valid.length > 0) {
+    html += `<div class="validation-success">${result.valid.length} Account(s) validated successfully and are ready for crawling.</div>`;
+  }
+  
+  if (result.invalid && result.invalid.length > 0) {
+    html += `<div style="margin-bottom: 8px;"><b>${result.invalid.length} Account(s) failed validation</b> and will be skipped:</div>`;
+    html += `<ul class="validation-list">`;
+    result.invalid.forEach(acc => {
+      html += `
+        <li class="validation-item">
+          <div class="validation-item-title">${escapeHtml(acc.Name)} (${escapeHtml(acc.Id)})</div>
+          <div class="validation-item-reason">${escapeHtml(acc.Reason)}<br/><i>Fallback updated: ${escapeHtml(acc.Dawn_Status__c)}</i></div>
+        </li>
+      `;
+    });
+    html += `</ul>`;
+  }
+  
+  modalBody.innerHTML = html;
+  modal.style.display = 'flex';
 }
 
 // Debounce Helper

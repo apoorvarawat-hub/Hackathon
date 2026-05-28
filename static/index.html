@@ -188,11 +188,8 @@
               
               <!-- Account Metadata Fields -->
               <div class="detail-row">
-                <div class="detail-label">Account ID</div>
-                <div class="detail-value" style="display: flex; align-items: center;">
-                  <span id="accFieldId" style="color: var(--text-muted, #B8B8B8);">ACC-00000</span>
-                  <i class="material-icons copy-icon-btn" id="btnCopyId" title="Copy ID">content_copy</i>
-                </div>
+                <div class="detail-label">Account Name</div>
+                <div class="detail-value bold" id="accFieldName">Dealership Name</div>
               </div>
               
               <div class="detail-row">
@@ -216,23 +213,8 @@
               </div>
               
               <div class="detail-row">
-                <div class="detail-label">Phone</div>
-                <div class="detail-value" id="accFieldPhone">+1-000-000-0000</div>
-              </div>
-              
-              <div class="detail-row">
-                <div class="detail-label">Industry</div>
-                <div class="detail-value" id="accFieldIndustry">Retail</div>
-              </div>
-              
-              <div class="detail-row">
-                <div class="detail-label">Annual Revenue</div>
-                <div class="detail-value" id="accFieldRevenue">$0</div>
-              </div>
-              
-              <div class="detail-row">
-                <div class="detail-label">Account Owner</div>
-                <div class="detail-value" id="accFieldOwner">Owner Name</div>
+                <div class="detail-label">Last Modified Date</div>
+                <div class="detail-value" id="accFieldLastModified">1/1/2026</div>
               </div>
             </div>
           </div>
@@ -244,5 +226,21 @@
 
   <!-- Application Logic -->
   <script src="app.js"></script>
+
+  <!-- Validation Modal -->
+  <div id="validationModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="myk-h6">Website Validation Results</h6>
+        <button class="icon-btn" id="btnCloseModal"><i class="material-icons">close</i></button>
+      </div>
+      <div class="modal-body" id="validationModalBody">
+        <!-- Content injected dynamically -->
+      </div>
+      <div class="modal-footer">
+        <button class="tb-btn primary" id="btnAcknowledgeModal">Acknowledge & Continue</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

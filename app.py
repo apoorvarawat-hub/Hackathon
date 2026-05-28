@@ -12,6 +12,7 @@ SALESFORCE_ACCOUNTS = [
         "Account_Status__c": "Active",
         "Payments_Stage__c": "Paid",
         "Website": "https://www.autonationfordnorthscottsdale.com",
+        "Dawn_Status__c": "",
         "LastModifiedDate": "2026-05-27T10:00:00Z",
         "Phone": "+1-480-555-0199",
         "Owner": "Sarah Jenkins",
@@ -25,6 +26,7 @@ SALESFORCE_ACCOUNTS = [
         "Account_Status__c": "Active",
         "Payments_Stage__c": "Trial",
         "Website": "https://www.mykaarmapremiumdealers.com",
+        "Dawn_Status__c": "",
         "LastModifiedDate": "2026-05-26T14:30:00Z",
         "Phone": "+1-206-555-0144",
         "Owner": "Marcus Aurelius",
@@ -37,7 +39,8 @@ SALESFORCE_ACCOUNTS = [
         "Territory_Region__c": "Midwest",
         "Account_Status__c": "Active",
         "Payments_Stage__c": "Paid",
-        "Website": "https://www.penskechevrolet.com",
+        "Website": "www.penskechevrolet.com", # Invalid because no http/https
+        "Dawn_Status__c": "",
         "LastModifiedDate": "2026-05-25T09:15:00Z",
         "Phone": "+1-317-555-0123",
         "Owner": "David Penske",
@@ -51,6 +54,7 @@ SALESFORCE_ACCOUNTS = [
         "Account_Status__c": "Inactive",
         "Payments_Stage__c": "Pending",
         "Website": "https://www.hendrickhonda.com",
+        "Dawn_Status__c": "",
         "LastModifiedDate": "2026-05-24T16:45:00Z",
         "Phone": "+1-704-555-0188",
         "Owner": "Linda Hendrick",
@@ -64,6 +68,7 @@ SALESFORCE_ACCOUNTS = [
         "Account_Status__c": "Active",
         "Payments_Stage__c": "Paid",
         "Website": "https://www.sewelllexus.com",
+        "Dawn_Status__c": "",
         "LastModifiedDate": "2026-05-27T11:20:00Z",
         "Phone": "+1-214-555-0108",
         "Owner": "Robert Sewell",
@@ -77,6 +82,7 @@ SALESFORCE_ACCOUNTS = [
         "Account_Status__c": "Active",
         "Payments_Stage__c": "Pending",
         "Website": None, # Should be filtered out by default (Website != null)
+        "Dawn_Status__c": "",
         "LastModifiedDate": "2026-05-23T08:00:00Z",
         "Phone": "+1-214-555-0777",
         "Owner": "Robert Sewell",
@@ -90,6 +96,7 @@ SALESFORCE_ACCOUNTS = [
         "Account_Status__c": "Inactive",
         "Payments_Stage__c": "Unpaid",
         "Website": "", # Should be filtered out by default (Website != null)
+        "Dawn_Status__c": "",
         "LastModifiedDate": "2026-05-22T13:10:00Z",
         "Phone": "+1-312-555-0988",
         "Owner": "David Penske",
@@ -135,6 +142,55 @@ def get_accounts():
     filtered.sort(key=lambda x: x['LastModifiedDate'], reverse=True)
     
     return jsonify(filtered)
+
+import urllib.parse
+from datetime import datetime
+
+@app.route('/api/discovery/start', methods=['POST'])
+def start_discovery():
+    data = request.get_json()
+    if not data or 'accountIds' not in data:
+        return jsonify({"error": "Missing accountIds"}), 400
+        
+    account_ids = data['accountIds']
+    valid_accounts = []
+    invalid_accounts = []
+    
+    for acc in SALESFORCE_ACCOUNTS:
+        if acc['Id'] in account_ids:
+            website = acc.get('Website', '')
+            is_valid = False
+            
+            if website:
+                try:
+                    result = urllib.parse.urlparse(website)
+                    if result.scheme in ['http', 'https'] and result.netloc:
+                        is_valid = True
+                except ValueError:
+                    is_valid = False
+                    
+            if is_valid:
+                valid_accounts.append({
+                    "Id": acc['Id'],
+                    "Name": acc['Name'],
+                    "Website": website
+                })
+            else:
+                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                reason = f"No website available - {timestamp}"
+                acc['Dawn_Status__c'] = reason
+                invalid_accounts.append({
+                    "Id": acc['Id'],
+                    "Name": acc['Name'],
+                    "Reason": "Invalid or missing website structure",
+                    "Dawn_Status__c": reason
+                })
+                print(f"Audit Log: Account {acc['Id']} ({acc['Name']}) failed website validation. Reason: {reason}")
+                
+    return jsonify({
+        "valid": valid_accounts,
+        "invalid": invalid_accounts
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, host='127.0.0.1', port=5000)

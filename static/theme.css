@@ -714,3 +714,102 @@ input[type="checkbox"] {
   font-size: 13px;
   color: var(--text-secondary, #535862);
 }
+
+/* ------------------------------------------
+   Modal & Overlay Styling
+   ------------------------------------------ */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(10, 13, 18, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.modal-content {
+  background: var(--bg-card, #FFFFFF);
+  border: 1px solid var(--border, #E9EAEB);
+  border-radius: 8px;
+  width: 500px;
+  max-width: 90vw;
+  box-shadow: 0 4px 6px rgba(10,13,18,0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border, #E9EAEB);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #B8B8B8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover {
+  color: var(--text-primary, #1A1A2E);
+}
+
+.modal-body {
+  padding: 20px;
+  font-size: 13px;
+  color: var(--text-primary, #1A1A2E);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border, #E9EAEB);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.validation-list {
+  list-style: none;
+  margin-top: 12px;
+}
+
+.validation-item {
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: var(--error-bg, #FEF3F2);
+  border: 1px solid var(--error-red, #B42318);
+  margin-bottom: 8px;
+}
+
+.validation-item-title {
+  font-weight: 700;
+  color: var(--error-red, #B42318);
+  margin-bottom: 4px;
+}
+
+.validation-item-reason {
+  color: var(--text-secondary, #535862);
+  font-size: 12px;
+}
+
+.validation-success {
+  padding: 12px;
+  border-radius: 4px;
+  background: var(--success-bg, #ECFDF3);
+  color: var(--success-green, #027A48);
+  border: 1px solid var(--success-green, #027A48);
+  margin-bottom: 16px;
+  font-weight: 700;
+}
