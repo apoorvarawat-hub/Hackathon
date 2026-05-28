@@ -535,6 +535,12 @@ body, html {
   white-space: nowrap;
 }
 
+.myk-table td:first-child {
+  padding: 12px 8px;
+  text-overflow: clip;
+  overflow: visible;
+}
+
 .myk-table tr:last-child td {
   border-bottom: none;
 }

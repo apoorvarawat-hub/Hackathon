@@ -129,44 +129,60 @@ async def find_team_page(page: Page, base_url: str) -> Tuple[Optional[str], Opti
     Load the homepage and return the best-matching team/about page URL.
     Returns (url, error_message) — one will always be None.
     """
-    try:
-        resp = await page.goto(base_url, wait_until="domcontentloaded", timeout=30_000)
-        if resp and resp.status == 429:
-            return None, "Rate limited (429) — retry after a delay", []
-        if resp and resp.status >= 400:
-            return None, f"HTTP {resp.status} on homepage", []
-        await _wait_for_real_content(page)
-        await _delay()
-    except Exception as e:
-        return None, f"Homepage load failed: {e}", []
+    _RETRY_DELAYS = [10, 25]  # seconds to wait before attempt 2 and 3
+    last_error = ""
+    homepage_ok = False
+    for attempt in range(3):
+        if attempt > 0:
+            wait = _RETRY_DELAYS[attempt - 1]
+            print(f"         429 on {base_url} — retrying in {wait}s (attempt {attempt + 1}/3)...")
+            await asyncio.sleep(wait)
+        try:
+            resp = await page.goto(base_url, wait_until="domcontentloaded", timeout=30_000)
+            if resp and resp.status == 429:
+                last_error = f"Rate limited (429) on homepage"
+                continue  # retry
+            if resp and resp.status >= 400:
+                # 403/404 etc — don't retry, but still try path probing below
+                last_error = f"HTTP {resp.status} on homepage"
+                break
+            await _wait_for_real_content(page)
+            await _delay()
+            homepage_ok = True
+            break  # success — exit retry loop
+        except Exception as e:
+            return None, f"Homepage load failed: {e}", []
+    # If all 3 attempts returned 429, last_error is set; fall through to path probing
 
-    soup = BeautifulSoup(await page.content(), "lxml")
     scored: list[tuple[int, str]] = []
     child_domains: set[str] = set()
 
-    for a in soup.find_all("a", href=True):
-        href: str = a["href"].strip()
-        text: str = a.get_text(strip=True)
+    if homepage_ok:
+        soup = BeautifulSoup(await page.content(), "lxml")
 
-        if href.startswith("/"):
-            href = urljoin(base_url, href)
-        elif not href.startswith("http"):
-            continue
+        for a in soup.find_all("a", href=True):
+            href: str = a["href"].strip()
+            text: str = a.get_text(strip=True)
 
-        if _same_domain(href, base_url):
-            s = _score_link(href, text)
-            if s > 0:
-                scored.append((s, href))
-        else:
-            # Always collect external links that look like child dealership sites
-            domain = urlparse(href).netloc
-            if not any(skip in domain for skip in ("facebook", "twitter", "instagram",
-                                                    "youtube", "linkedin", "google",
-                                                    "yelp", "maps", "apple")):
-                href_lower = href.lower()
-                t_lower = text.lower()
-                if any(kw in href_lower or kw in t_lower for kw in DEALERSHIP_LINK_KEYWORDS):
-                    child_domains.add(domain)
+            if href.startswith("/"):
+                href = urljoin(base_url, href)
+            elif not href.startswith("http"):
+                continue
+
+            if _same_domain(href, base_url):
+                s = _score_link(href, text)
+                if s > 0:
+                    scored.append((s, href))
+            else:
+                # Always collect external links that look like child dealership sites
+                domain = urlparse(href).netloc
+                if not any(skip in domain for skip in ("facebook", "twitter", "instagram",
+                                                        "youtube", "linkedin", "google",
+                                                        "yelp", "maps", "apple")):
+                    href_lower = href.lower()
+                    t_lower = text.lower()
+                    if any(kw in href_lower or kw in t_lower for kw in DEALERSHIP_LINK_KEYWORDS):
+                        child_domains.add(domain)
 
     # Build child URL list from every detected child dealership domain
     child_urls = [f"https://{d}/" for d in child_domains]
@@ -176,8 +192,13 @@ async def find_team_page(page: Page, base_url: str) -> Tuple[Optional[str], Opti
         return scored[0][1], None, child_urls
 
     # ── Fallback: probe common paths directly ─────────────────────────────────
+    # Even if the homepage was blocked (403/429), specific paths often bypass CDN protection.
+    # /dealership/staff.htm is the standard path for Dealer.com (DDC) platform sites
+    # (Lithia Motors group and many other large dealer groups use DDC).
     base = base_url.rstrip("/")
     path_candidates = [
+        "/dealership/staff.htm",           # Dealer.com (DDC) — Lithia, AutoNation, etc.
+        "/dealership/staff/",
         "/meet-the-team", "/meet-our-team",
         "/meet-the-staff", "/meet-our-staff",
         "/our-team", "/our-staff",
@@ -188,10 +209,21 @@ async def find_team_page(page: Page, base_url: str) -> Tuple[Optional[str], Opti
         "/about-us", "/about",
         "/leadership", "/who-we-are",
     ]
+
+    # If homepage was rate-limited, give Akamai/CDN a moment to reset before probing paths
+    if "429" in last_error:
+        print(f"         Homepage rate-limited — waiting 15s before path probing...")
+        await asyncio.sleep(15)
+
     for path in path_candidates:
         url = base + path
         try:
+            await asyncio.sleep(0.8)  # small pause to avoid triggering rate limits on rapid probing
             resp = await page.goto(url, wait_until="domcontentloaded", timeout=15_000)
+            if resp and resp.status == 429:
+                print(f"         429 on {path} — waiting 20s...")
+                await asyncio.sleep(20)
+                continue
             if resp and resp.status == 200:
                 html = await page.content()
                 text_len = len(BeautifulSoup(html, "lxml").get_text(strip=True))
@@ -200,7 +232,7 @@ async def find_team_page(page: Page, base_url: str) -> Tuple[Optional[str], Opti
         except Exception:
             continue
 
-    return None, "No team/about page found (homepage scan + path fallback both failed)", child_urls
+    return None, last_error or "No team/about page found (homepage scan + path fallback both failed)", child_urls
 
 
 async def find_child_dealership_urls(page: Page, base_url: str) -> list[str]:
@@ -484,12 +516,24 @@ async def _scrape_team_page(page: Page, team_url: str, roles: list[str], source_
     """Load a team page URL and extract matching people. Returns a partial result dict."""
     out: dict = {"team_page_found": team_url, "people": [], "blocked": False, "error": None,
                  "source_site": source_site}
-    try:
-        await page.goto(team_url, wait_until="domcontentloaded", timeout=30_000)
-        await _wait_for_real_content(page)
-    except Exception as e:
-        out["error"] = f"Team page load failed: {e}"
-        return out
+    _RETRY_DELAYS = [10, 25]
+    for attempt in range(3):
+        if attempt > 0:
+            wait = _RETRY_DELAYS[attempt - 1]
+            print(f"         429 on team page — retrying in {wait}s (attempt {attempt + 1}/3)...")
+            await asyncio.sleep(wait)
+        try:
+            resp = await page.goto(team_url, wait_until="domcontentloaded", timeout=30_000)
+            if resp and resp.status == 429:
+                if attempt < 2:
+                    continue
+                out["error"] = "Rate limited (429) — failed after 3 attempts"
+                return out
+            await _wait_for_real_content(page)
+            break  # success
+        except Exception as e:
+            out["error"] = f"Team page load failed: {e}"
+            return out
 
     # Wait for JS-driven AJAX content to render.
     # Many dealership platforms fire the staff-data request via setTimeout AFTER networkidle,

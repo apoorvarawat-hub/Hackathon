@@ -7,7 +7,7 @@ A human-in-the-loop AI enrichment platform that discovers dealership personnel f
 ## What It Does
 
 1. **Account Selection** — pulls Prospect accounts from Salesforce sandbox; filter by name, region, payment status
-2. **Discovery** — Playwright-based scraper finds staff/team pages on each dealership website
+2. **Discovery** — Playwright-based scraper finds staff/team pages on each dealership website; supports DealerInspire, Dealer.com (DDC), DealerSocket, and custom CMS platforms
 3. **Extraction** — extracts names, titles, emails, and phone numbers; normalises roles against 7 target profiles
 4. **Review** — human reviews each contact (approve / reject / edit) before anything touches Salesforce
 5. **Sync** — approved contacts are created or updated in Salesforce with full dedup and audit trail
@@ -124,6 +124,13 @@ User visits /
 - **Writes** `Contact` records (create / update) after user approval
 - **Updates** `Dawn_Status__c` on accounts that fail scraping
 - Falls back to mock data if SF credentials are not configured
+
+## Scraper Notes
+
+- Supports multiple dealership CMS platforms: DealerInspire, Dealer.com (DDC), DealerSocket, and custom sites
+- DDC platform sites (Lithia Motors group, etc.) use `/dealership/staff.htm` — the scraper probes this directly if the homepage is blocked by CDN
+- Rate limiting (HTTP 429): retries up to 3× with 10 s / 25 s back-off; falls through to direct path probing if the homepage remains blocked
+- Large dealership groups (Lithia, AutoNation) use Akamai CDN with aggressive bot detection — a rotating proxy is recommended for production use against these sites
 
 ---
 

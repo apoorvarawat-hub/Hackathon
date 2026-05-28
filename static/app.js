@@ -1062,7 +1062,7 @@ function renderReviewQueue() {
   if (total === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">
+        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 32px;">
           <i class="material-icons" style="font-size: 48px; display: block; margin-bottom: 8px;">rate_review</i>
           No contacts extracted yet. Select accounts and click "Extract Staff" to load contacts.
         </td>
@@ -1084,28 +1084,13 @@ function renderReviewQueue() {
                  c.action === 'rejected' ? 'row-rejected' : 
                  c.action === 'edited' ? 'row-approved row-edited' : '';
                  
-    const emailIcon = c.email_valid ? 
-      '<span style="color: var(--success-green); margin-left: 4px;" title="Valid Email">✅</span>' : 
-      '<span style="color: var(--error-red); margin-left: 4px;" title="Invalid Email">❌</span>';
-      
-    const phoneIcon = c.phone_valid ? 
-      '<span style="color: var(--success-green); margin-left: 4px;" title="Valid Phone">✅</span>' : 
-      '<span style="color: var(--error-red); margin-left: 4px;" title="Invalid Phone">❌</span>';
-      
     tr.innerHTML = `
-      <td onclick="event.stopPropagation()">
-        <input type="checkbox" class="review-row-checkbox" data-uid="${escapeHtml(c.uniqueId)}">
-      </td>
       <td style="font-weight: 700;">${escapeHtml(c.full_name)}</td>
       <td>${escapeHtml(c.normalized_role)}</td>
       <td>
         <a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>
-        ${emailIcon}
       </td>
-      <td>
-        ${escapeHtml(c.phone_number)}
-        ${phoneIcon}
-      </td>
+      <td>${escapeHtml(c.phone_number)}</td>
       <td>
         <span class="status-badge status-active">${(c.confidence * 100).toFixed(0)}%</span>
       </td>
@@ -1310,8 +1295,9 @@ function renderSyncDashboard() {
   state.syncResults.forEach(res => {
     totalCreated += res.created_count || 0;
     totalUpdated += res.updated_count || 0;
-    totalFailed += res.flagged_count || 0;
+    totalFailed += (res.flagged_count || 0) + (res.error_count || 0);
     totalSkipped += res.skipped_count || 0;
+    const syncAccountName = res.accountName || res.accountId;
     
     if (res.audit_trail && Array.isArray(res.audit_trail)) {
       combinedAuditLogs = combinedAuditLogs.concat(res.audit_trail);
@@ -1351,7 +1337,7 @@ function renderSyncDashboard() {
       }
       
       tr.innerHTML = `
-        <td>${escapeHtml(res.accountId)}</td>
+        <td title="${escapeHtml(res.accountId)}">${escapeHtml(syncAccountName)}</td>
         <td>${nameHtml}</td>
         <td>${escapeHtml(c.email)}</td>
         <td>${escapeHtml(c.normalized_role || c.title || '')}</td>

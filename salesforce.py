@@ -116,21 +116,25 @@ def fetch_contacts_for_account(account_id: str) -> list[dict]:
     ]
 
 
-def create_contact(account_id: str, full_name: str, email: str, phone: str, title: str) -> str:
+def create_contact(account_id: str, full_name: str, email: str, phone: str, title: str, department: str = '') -> str:
     """Create a Contact and return the new Salesforce Id."""
     sf = _get_sf()
     parts = full_name.strip().split()
     last = parts[-1] if parts else 'Unknown'
     first = ' '.join(parts[:-1]) if len(parts) > 1 else ''
 
-    result = sf.Contact.create({
+    payload = {
         'AccountId': account_id,
         'FirstName': first,
         'LastName': last,
         'Email': email or '',
         'Phone': phone or '',
         'Title': title or '',
-    })
+    }
+    if department:
+        payload['Department'] = department
+
+    result = sf.Contact.create(payload)
     return result['id']
 
 

@@ -609,6 +609,7 @@ def submit_review():
     updated_count = 0
     skipped_count = 0
     flagged_count = 0
+    error_count = 0
     
     audit_trail = []
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -716,6 +717,7 @@ def submit_review():
             audit_trail.append(f"[{timestamp}] WARNING: Flagged duplicate phone '{c.get('phone_number')}' for '{c.get('full_name')}'. Matches '{phone_acc_match.get('Name')}' in CRM.")
 
         else:
+            department = c.get('department', '')
             if sf_client.USE_SALESFORCE:
                 try:
                     new_id = sf_client.create_contact(
@@ -724,10 +726,21 @@ def submit_review():
                         c.get('email', ''),
                         c.get('phone_number', ''),
                         title,
+                        department,
                     )
+                    matched_id = new_id
+                    operation = "Create Contact"
+                    status_str = "Created"
+                    created_count += 1
+                    audit_trail.append(f"[{timestamp}] CREATE: Created new contact {new_id} ({c.get('full_name')}) as {title}")
                 except Exception as e:
                     print(f"SF create failed: {e}")
-                    new_id = f"CON-{account_id}-ERR"
+                    matched_id = None
+                    operation = "Create Contact"
+                    status_str = "Error"
+                    error_msg = f"Salesforce create failed: {e}"
+                    error_count += 1
+                    audit_trail.append(f"[{timestamp}] ERROR: Failed to create contact ({c.get('full_name')}): {e}")
             else:
                 new_id = f"CON-{account_id}-{len(SALESFORCE_CONTACTS) + 1}"
                 SALESFORCE_CONTACTS.append({
@@ -738,11 +751,11 @@ def submit_review():
                     "Phone": c.get('phone_number', ''),
                     "Title": title,
                 })
-            matched_id = new_id
-            operation = "Create Contact"
-            status_str = "Created"
-            created_count += 1
-            audit_trail.append(f"[{timestamp}] CREATE: Created new contact {new_id} ({c.get('full_name')}) as {title}")
+                matched_id = new_id
+                operation = "Create Contact"
+                status_str = "Created"
+                created_count += 1
+                audit_trail.append(f"[{timestamp}] CREATE: Created new contact {new_id} ({c.get('full_name')}) as {title}")
             
         sync_contact = c.copy()
         sync_contact['operation'] = operation
@@ -754,17 +767,19 @@ def submit_review():
     REVIEWED_CONTACTS[account_id] = validated_contacts
     account['ReviewedStaff'] = validated_contacts
     
-    audit_trail.append(f"[{timestamp}] INFO: Sync completed. Created: {created_count}, Updated: {updated_count}, Skipped: {skipped_count}, Flagged: {flagged_count}")
-    
+    audit_trail.append(f"[{timestamp}] INFO: Sync completed. Created: {created_count}, Updated: {updated_count}, Skipped: {skipped_count}, Flagged: {flagged_count}, Errors: {error_count}")
+
     return jsonify({
         "status": "success",
         "accountId": account_id,
+        "accountName": account.get('Name', ''),
         "approved_count": approved_count,
         "rejected_count": rejected_count,
         "created_count": created_count,
         "updated_count": updated_count,
         "skipped_count": skipped_count,
         "flagged_count": flagged_count,
+        "error_count": error_count,
         "contacts": validated_contacts,
         "audit_trail": audit_trail
     })
