@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Salesforce Contact Discovery Agent | myKaarma</title>
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="Autonomous human-in-the-loop Salesforce contact discovery and validation agent.">
+  
+  <!-- Typography & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  
+  <!-- Style Sheet -->
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body>
+
+  <!-- Application Shell -->
+  <div id="shell" class="light">
+    <script>
+      (function() {
+        const stored = localStorage.getItem('mk-theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.getElementById('shell').className = stored || (prefersDark ? 'dark' : 'light');
+      })();
+    </script>
+
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <!-- Brand Header -->
+      <div class="brand-header">
+        <div class="logo-mark" id="logoMark">mk</div>
+        <span class="brand-wordmark">myKaarma</span>
+      </div>
+
+      <!-- Navigation Items -->
+      <div class="nav-container">
+        <div class="nav-group-label">Discovery Control</div>
+        
+        <div class="nav-item active" id="navAccountSelect">
+          <i class="material-icons">domain</i>
+          <span>Account Selection</span>
+        </div>
+        
+        <div class="nav-item disabled" id="navCrawlProgress" title="Complete Milestone 1 to unlock">
+          <i class="material-icons">sync</i>
+          <span>Crawl Progress</span>
+        </div>
+        
+        <div class="nav-item disabled" id="navReviewQueue" title="Complete Milestone 1 to unlock">
+          <i class="material-icons">rate_review</i>
+          <span>Review Queue</span>
+        </div>
+        
+        <div class="nav-item disabled" id="navSyncDashboard" title="Complete Milestone 1 to unlock">
+          <i class="material-icons">cloud_sync</i>
+          <span>Sync Dashboard</span>
+        </div>
+      </div>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <div class="avatar" id="userAvatar" title="User Profile">JD</div>
+        <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" role="switch" aria-checked="false">
+          <span class="theme-label" id="themeToggleLabel">Light</span>
+          <div class="toggle-track">
+            <div class="toggle-knob" id="toggleKnob">
+              <i class="material-icons" id="toggleIcon" style="color: #ED6D22;">wb_sunny</i>
+            </div>
+          </div>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main class="workspace">
+      <!-- Top Bar -->
+      <header class="top-bar">
+        <div class="top-bar-title-section">
+          <h5 class="myk-h5" id="mainTitle">Discovery Agent</h5>
+          <nav class="breadcrumb" id="breadcrumbTrail" aria-label="Breadcrumb">Home › Discovery Agent</nav>
+        </div>
+        
+        <div style="margin-left: auto; display: flex; gap: 8px;">
+          <button class="tb-btn secondary disabled" id="btnExport" disabled>Export CSV</button>
+          <button class="tb-btn primary disabled" id="btnStartDiscovery" disabled>Start Discovery</button>
+        </div>
+      </header>
+
+      <!-- Workspace Content (Grid Layout) -->
+      <div class="content-area">
+        
+        <!-- Search & Selection Panel (Left Card) -->
+        <section class="myk-card" id="searchPanelCard">
+          <div class="myk-card-header">
+            <h6 class="myk-h6">Salesforce Accounts</h6>
+            <span class="myk-subtitle1" id="accountsCount">0 Accounts</span>
+          </div>
+          
+          <div class="myk-card-body">
+            <!-- Search Form Group -->
+            <div class="form-group">
+              <label for="accountSearchInput" class="form-label">Search Salesforce Accounts</label>
+              <div class="input-container">
+                <i class="material-icons">search</i>
+                <input type="text" id="accountSearchInput" class="myk-input" placeholder="Search by name, dealer code, or region..." autocomplete="off">
+              </div>
+            </div>
+            
+            <!-- Accounts Data Grid Table -->
+            <div class="table-container">
+              <table class="myk-table" id="accountsTable">
+                <thead>
+                  <tr>
+                    <th style="width: 45%;">Account Name</th>
+                    <th style="width: 25%;">Dealer Code</th>
+                    <th style="width: 15%;">Region</th>
+                    <th style="width: 15%;">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="accountsTableBody">
+                  <!-- Dynamic rows will be injected here -->
+                </tbody>
+              </table>
+              
+              <!-- Table Empty State -->
+              <div class="empty-state" id="tableEmptyState" style="display: none;">
+                <i class="material-icons">info_outline</i>
+                <div class="empty-state-title">No matching accounts found</div>
+                <div class="empty-state-text">Try adjusting your search terms or filters.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Selected Account Context Panel (Right Card) -->
+        <section class="myk-card" id="detailsPanelCard">
+          <div class="myk-card-header">
+            <h6 class="myk-h6">Account Details</h6>
+          </div>
+          
+          <div class="myk-card-body" id="detailsCardBody">
+            <!-- Default Empty State -->
+            <div class="empty-state" id="detailsEmptyState">
+              <i class="material-icons">corporate_fare</i>
+              <div class="empty-state-title">No Account Selected</div>
+              <div class="empty-state-text">Select a Salesforce Account from the grid to view context and retrieve its dealership website URL.</div>
+            </div>
+            
+            <!-- Selected Content Details Panel (Initially Hidden) -->
+            <div class="details-panel" id="detailsDataPanel" style="display: none;">
+              <!-- Website Highlight Box -->
+              <div class="website-container" id="websiteHighlightBox">
+                <div class="website-title">Dealership Website Context</div>
+                <a href="#" target="_blank" class="website-link" id="accountWebsiteLink" rel="noopener">
+                  <span id="accountWebsiteText">https://example.com</span>
+                  <i class="material-icons">open_in_new</i>
+                </a>
+              </div>
+              
+              <!-- Account Metadata Fields -->
+              <div class="detail-row">
+                <div class="detail-label">Account ID</div>
+                <div class="detail-value" style="display: flex; align-items: center;">
+                  <span id="accFieldId" style="color: var(--text-muted, #B8B8B8);">ACC-00000</span>
+                  <i class="material-icons copy-icon-btn" id="btnCopyId" title="Copy ID">content_copy</i>
+                </div>
+              </div>
+              
+              <div class="detail-row">
+                <div class="detail-label">Account Name</div>
+                <div class="detail-value bold" id="accFieldName">Dealership Name</div>
+              </div>
+              
+              <div class="detail-row">
+                <div class="detail-label">Dealer Code</div>
+                <div class="detail-value" id="accFieldCode">CODE-00</div>
+              </div>
+              
+              <div class="detail-row">
+                <div class="detail-label">Region</div>
+                <div class="detail-value" id="accFieldRegion">Northwest</div>
+              </div>
+              
+              <div class="detail-row">
+                <div class="detail-label">Phone</div>
+                <div class="detail-value" id="accFieldPhone">+1-000-000-0000</div>
+              </div>
+              
+              <div class="detail-row">
+                <div class="detail-label">Industry</div>
+                <div class="detail-value" id="accFieldIndustry">Retail</div>
+              </div>
+              
+              <div class="detail-row">
+                <div class="detail-label">Annual Revenue</div>
+                <div class="detail-value" id="accFieldRevenue">$0</div>
+              </div>
+              
+              <div class="detail-row">
+                <div class="detail-label">Account Owner</div>
+                <div class="detail-value" id="accFieldOwner">Owner Name</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
